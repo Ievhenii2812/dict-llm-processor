@@ -1,0 +1,59 @@
+services:
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./vokab/:/var/www
+      - ./_docker/nginx/conf.d:/etc/nginx/conf.d
+    ports:
+      - 8008:80
+    depends_on:
+      - app
+    container_name: vokab_nginx
+
+  app:
+    build:
+      context: .
+      dockerfile: _docker/app/Dockerfile
+    volumes:
+      - ./vokab/:/var/www
+    depends_on:
+        - db
+    container_name: vokab_app
+
+  lemmatizer:
+    build:
+      context: ./lemmatizer
+    ports:
+      - "8000:8000"
+    container_name: vokab_lemmatizer
+    restart: unless-stopped
+
+  db:
+    image: postgres:17.5
+    restart: always
+    shm_size: 1024mb
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: dl_eugene
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: vokab
+    ports:
+      - 5432:5432
+    container_name: vokab_db
+
+  translator:
+    build:
+      context: ./translator
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    restart: always
+    container_name: vokab_translator
+
+  redis:
+    image: redis
+    container_name: vokab_redis
+    restart: always
+    ports:
+      - "6379:6379"
