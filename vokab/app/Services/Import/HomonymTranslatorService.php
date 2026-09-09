@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\Word;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 class HomonymTranslatorService
 {
@@ -41,7 +42,7 @@ Response:
 PROMPT;
 
     public function __construct(
-        private readonly GeminiAIStudioService $ai,
+        private readonly AIProviderInterface $ai,
     ) {}
 
     public function run(): void

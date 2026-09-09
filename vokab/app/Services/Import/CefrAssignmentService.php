@@ -5,6 +5,7 @@ namespace App\Services\Import;
 use App\Enums\CefrLevel;
 use App\Models\Word;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Assigns CEFR levels (A1-C2) to German words using Gemini Flash via Vertex AI.
@@ -50,7 +51,7 @@ Example:
 PROMPT;
 
     public function __construct(
-        private readonly VertexAIService $vertex,
+        private readonly AIProviderInterface $vertex,
     ) {}
 
     public function run(): void

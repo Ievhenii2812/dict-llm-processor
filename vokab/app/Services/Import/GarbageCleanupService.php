@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\Word;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Identifies and removes garbage words using Gemini Flash via Vertex AI.
@@ -47,7 +48,7 @@ Respond ONLY with this exact JSON format, no other fields:
 PROMPT;
 
     public function __construct(
-        private readonly VertexAIService $vertex,
+        private readonly AIProviderInterface $vertex,
     ) {}
 
     public function run(): void

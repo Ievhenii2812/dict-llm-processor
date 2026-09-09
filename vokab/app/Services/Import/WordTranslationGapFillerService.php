@@ -5,6 +5,7 @@ namespace App\Services\Import;
 use App\Models\Word;
 use App\Services\Import\GeminiAIStudioService;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Fills translation gaps for words that already went through
@@ -51,7 +52,7 @@ Example:
 PROMPT;
 
     public function __construct(
-        private readonly GeminiAIStudioService $ai,
+        private readonly AIProviderInterface   $ai,
         private readonly ExampleTranslator     $translator,
     ) {}
 

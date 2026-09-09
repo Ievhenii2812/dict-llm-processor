@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\Phrase;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 class PhraseTranslatorService
 {
@@ -16,7 +17,7 @@ PROMPT;
 
     public function __construct(
         private readonly ExampleTranslator     $translator,
-        private readonly GeminiAIStudioService $ai,
+        private readonly AIProviderInterface   $ai,
     ) {}
 
     public function run(): void

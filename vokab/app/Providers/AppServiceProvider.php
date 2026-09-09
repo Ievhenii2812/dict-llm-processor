@@ -25,6 +25,9 @@ use App\Services\Import\WordSemanticTranslatorService;
 use App\Services\Import\LeipzigSentencesParser;
 use App\Services\Import\WordTranslationGapFillerService;
 use App\Services\Import\CompoundSplitterService;
+use App\Services\Import\Contracts\AIProviderInterface;
+use App\Services\Import\MistralService;
+use App\Services\Import\GroqService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,10 +44,10 @@ class AppServiceProvider extends ServiceProvider
         // ── Import pipeline ───────────────────────────────────────────────────
         $this->app->singleton(ImportOrchestrator::class, function ($app) {
             return new ImportOrchestrator(
-                hunspell:     $app->make(SpacyService::class),
-                wiktionary:   $app->make(WiktionaryDumpParser::class),
-                saver:        $app->make(WordSaver::class),
-                filePath:     config('import.leipzig_file'),
+                hunspell: $app->make(SpacyService::class),
+                wiktionary: $app->make(WiktionaryDumpParser::class),
+                saver: $app->make(WordSaver::class),
+                filePath: config('import.leipzig_file'),
                 sessionLimit: 25,
             );
         });
@@ -52,7 +55,7 @@ class AppServiceProvider extends ServiceProvider
         // ── Post-import cleanup ───────────────────────────────────────────────
         $this->app->singleton(CleanupService::class, function ($app) {
             return new CleanupService(
-                spacy:  $app->make(SpacyService::class),
+                spacy: $app->make(SpacyService::class),
                 vertex: $app->make(VertexAIService::class),
             );
         });
@@ -90,15 +93,25 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
+        $this->app->singleton(AIProviderInterface::class, function ($app) {
+            return match (config('import.ai_provider', 'gemini')) {
+                'mistral' => $app->make(MistralService::class),
+                'groq' => $app->make(GroqService::class),
+                default => $app->make(GeminiAIStudioService::class),
+            };
+        });
+
         $this->app->singleton(GeminiAIStudioService::class);
+        $this->app->singleton(MistralService::class);
+        $this->app->singleton(GroqService::class);
 
         $this->app->singleton(CompoundSplitterService::class);
 
         $this->app->singleton(WordSemanticTranslatorService::class, function ($app) {
             return new WordSemanticTranslatorService(
-                ai:         $app->make(GeminiAIStudioService::class),
-                spacy:      $app->make(SpacyService::class),
-                splitter:   $app->make(CompoundSplitterService::class),
+                ai: $app->make(GeminiAIStudioService::class),
+                spacy: $app->make(SpacyService::class),
+                splitter: $app->make(CompoundSplitterService::class),
                 translator: $app->make(ExampleTranslator::class),
             );
         });
@@ -120,7 +133,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(WordTranslationGapFillerService::class, function ($app) {
             return new WordTranslationGapFillerService(
-                ai:         $app->make(GeminiAIStudioService::class),
+                ai: $app->make(GeminiAIStudioService::class),
                 translator: $app->make(ExampleTranslator::class),
             );
         });

@@ -7,6 +7,7 @@ use App\Models\ExampleWord;
 use App\Models\Word;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Post-import database cleanup.
@@ -32,8 +33,8 @@ class CleanupService
     ];
 
     public function __construct(
-        private readonly SpacyService    $spacy,
-        private readonly VertexAIService $vertex,
+        private readonly SpacyService        $spacy,
+        private readonly AIProviderInterface $vertex,
     ) {}
 
     public function run(): void

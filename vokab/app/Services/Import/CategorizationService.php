@@ -7,6 +7,7 @@ use App\Models\GroupWord;
 use App\Models\Word;
 use App\Models\WordGroup;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Categorizes German words into thematic groups using Gemini Pro via Vertex AI.
@@ -60,7 +61,7 @@ RESPONSE FORMAT:
 PROMPT;
 
     public function __construct(
-        private readonly VertexAIService $vertex,
+        private readonly AIProviderInterface $vertex,
     ) {}
 
     public function run(): void

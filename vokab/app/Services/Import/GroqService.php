@@ -6,33 +6,52 @@ use App\Services\Import\Contracts\AIProviderInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
-class GeminiAIStudioService implements AIProviderInterface
+/**
+ * Groq API client (free tier).
+ *
+ * Free tier: ~30 requests/min, ~14,400 requests/day, 500k tokens/day
+ * (Llama 3.1 8B Instant tier). Open-source models (Llama, Qwen3,
+ * Mixtral, GPT-OSS), not proprietary — quality for structured JSON
+ * tasks should be verified against Gemini/Mistral output before
+ * relying on it for anything quality-sensitive.
+ *
+ * "Flash" tier -> a fast small model, "Pro" tier -> a larger one.
+ * Adjust model names in .env as Groq's model lineup changes.
+ *
+ * Config (.env):
+ *   GROQ_API_KEY=your-key
+ *   GROQ_FLASH_MODEL=llama-3.1-8b-instant
+ *   GROQ_PRO_MODEL=llama-3.3-70b-versatile
+ */
+class GroqService implements AIProviderInterface
 {
     private string $apiKey;
-    private string $proModel;
     private string $flashModel;
+    private string $proModel;
 
-    private const string BASE_URL    = 'https://generativelanguage.googleapis.com/v1beta/models';
+    private const string BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
     private const int    TIMEOUT     = 120;
     private const int    RETRY_MAX   = 2;
-    private const int    RETRY_DELAY = 5_000_000;
-    private const int    MIN_REQUEST_INTERVAL_US = 4_500_000;
+    private const int    RETRY_DELAY = 2_000_000;
+
+    // Free tier ~30 req/min — pace conservatively
+    private const int MIN_REQUEST_INTERVAL_US = 2_100_000;
 
     public function __construct()
     {
-        $this->apiKey     = config('import.gemini_api_key');
-        $this->proModel   = config('import.gemini_pro_model', 'gemini-2.5-pro');
-        $this->flashModel = config('import.gemini_flash_model', 'gemini-2.5-flash');
-    }
-
-    public function askProJson(string $systemPrompt, string $userPrompt): ?array
-    {
-        return $this->askJson($this->proModel, $systemPrompt, $userPrompt);
+        $this->apiKey     = config('import.groq_api_key');
+        $this->flashModel = config('import.groq_flash_model', 'llama-3.1-8b-instant');
+        $this->proModel   = config('import.groq_pro_model', 'llama-3.3-70b-versatile');
     }
 
     public function askFlashJson(string $systemPrompt, string $userPrompt): ?array
     {
         return $this->askJson($this->flashModel, $systemPrompt, $userPrompt);
+    }
+
+    public function askProJson(string $systemPrompt, string $userPrompt): ?array
+    {
+        return $this->askJson($this->proModel, $systemPrompt, $userPrompt);
     }
 
     private function askJson(string $model, string $systemPrompt, string $userPrompt): ?array
@@ -41,13 +60,12 @@ class GeminiAIStudioService implements AIProviderInterface
 
         while ($attempt < self::RETRY_MAX) {
             $attempt++;
-
             $this->pace();
 
             $raw = $this->sendRequest($model, $systemPrompt, $userPrompt);
 
             if ($raw === null) {
-                Log::channel('import')->warning('AIStudio: no response', [
+                Log::channel('import')->warning('Groq: no response', [
                     'model' => $model, 'attempt' => $attempt,
                 ]);
                 if ($attempt < self::RETRY_MAX) usleep(self::RETRY_DELAY);
@@ -57,18 +75,18 @@ class GeminiAIStudioService implements AIProviderInterface
             $parsed = $this->parseJson($raw);
             if ($parsed !== null) return $parsed;
 
-            Log::channel('import')->warning('AIStudio: invalid JSON, retrying', [
+            Log::channel('import')->warning('Groq: invalid JSON, retrying', [
                 'model' => $model, 'raw' => mb_substr($raw, 0, 200),
             ]);
         }
 
-        Log::channel('import')->error('AIStudio: failed after retries', ['model' => $model]);
+        Log::channel('import')->error('Groq: failed after retries', ['model' => $model]);
         return null;
     }
 
     private function pace(): void
     {
-        $lastRequestAt = (float) Cache::get('gemini_last_request_at', 0.0);
+        $lastRequestAt = (float) Cache::get('groq_last_request_at', 0.0);
         $elapsedUs = (microtime(true) - $lastRequestAt) * 1_000_000;
 
         if ($elapsedUs < self::MIN_REQUEST_INTERVAL_US) {
@@ -78,16 +96,14 @@ class GeminiAIStudioService implements AIProviderInterface
 
     private function sendRequest(string $model, string $systemPrompt, string $userPrompt): ?string
     {
-        $url = self::BASE_URL . "/{$model}:generateContent?key={$this->apiKey}";
-
         $payload = json_encode([
-            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-            'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'temperature'      => 0.1,
-                'maxOutputTokens'  => 16384,
+            'model'    => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $userPrompt],
             ],
+            'response_format' => ['type' => 'json_object'],
+            'temperature'     => 0.1,
         ]);
 
         $context = stream_context_create([
@@ -95,6 +111,7 @@ class GeminiAIStudioService implements AIProviderInterface
                 'method'        => 'POST',
                 'header'        => implode("\r\n", [
                     'Content-Type: application/json',
+                    'Authorization: Bearer ' . $this->apiKey,
                     'Content-Length: ' . strlen($payload),
                 ]),
                 'content'       => $payload,
@@ -103,8 +120,8 @@ class GeminiAIStudioService implements AIProviderInterface
             ],
         ]);
 
-        $result = @file_get_contents($url, false, $context);
-        Cache::put('gemini_last_request_at', microtime(true), 600);
+        $result = @file_get_contents(self::BASE_URL, false, $context);
+        Cache::put('groq_last_request_at', microtime(true), 600);
 
         $status = 0;
         foreach ($http_response_header ?? [] as $h) {
@@ -112,12 +129,12 @@ class GeminiAIStudioService implements AIProviderInterface
         }
 
         if ($status === 429) {
-            Log::channel('import')->error('AIStudio: RATE LIMIT HIT (429)', ['model' => $model]);
-            throw new AIRateLimitException('AI Studio rate limit (429) reached');
+            Log::channel('import')->error('Groq: RATE LIMIT HIT (429)', ['model' => $model]);
+            throw new AIRateLimitException('Groq rate limit (429) reached');
         }
 
         if ($result === false || $status !== 200) {
-            Log::channel('import')->error('AIStudio: HTTP request failed', [
+            Log::channel('import')->error('Groq: HTTP request failed', [
                 'status' => $status, 'body' => $result ? mb_substr($result, 0, 300) : null,
             ]);
             return null;
@@ -126,7 +143,7 @@ class GeminiAIStudioService implements AIProviderInterface
         $data = json_decode($result, true);
         if (json_last_error() !== JSON_ERROR_NONE) return null;
 
-        return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        return $data['choices'][0]['message']['content'] ?? null;
     }
 
     private function parseJson(string $raw): ?array
@@ -140,12 +157,6 @@ class GeminiAIStudioService implements AIProviderInterface
         if ($start !== false && $end !== false && $end > $start) {
             $decoded = json_decode(substr($clean, $start, $end - $start + 1), true);
             if (json_last_error() === JSON_ERROR_NONE) return $decoded;
-        }
-
-        $start = strpos($clean, '['); $end = strrpos($clean, ']');
-        if ($start !== false && $end !== false && $end > $start) {
-            $decoded = json_decode(substr($clean, $start, $end - $start + 1), true);
-            if (json_last_error() === JSON_ERROR_NONE) return ['results' => $decoded];
         }
 
         return null;

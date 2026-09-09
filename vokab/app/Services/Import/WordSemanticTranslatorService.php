@@ -5,6 +5,7 @@ namespace App\Services\Import;
 use App\Enums\PartOfSpeech;
 use App\Models\Word;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 class WordSemanticTranslatorService
 {
@@ -45,10 +46,10 @@ Example:
 PROMPT;
 
     public function __construct(
-        private readonly GeminiAIStudioService  $ai,
-        private readonly SpacyService           $spacy,
+        private readonly AIProviderInterface     $ai,
+        private readonly SpacyService            $spacy,
         private readonly CompoundSplitterService $splitter,
-        private readonly ExampleTranslator      $translator,
+        private readonly ExampleTranslator       $translator,
     ) {}
 
     public function run(): void

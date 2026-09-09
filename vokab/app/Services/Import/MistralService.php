@@ -6,33 +6,50 @@ use App\Services\Import\Contracts\AIProviderInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
-class GeminiAIStudioService implements AIProviderInterface
+/**
+ * Mistral AI client (La Plateforme, free tier).
+ *
+ * Free tier: ~1 request/sec, 500k tokens/min, 1 billion tokens/month —
+ * no hard daily request cap, unlike Gemini AI Studio. Better suited
+ * for sustained batch processing.
+ *
+ * "Flash" tier -> mistral-small-latest, "Pro" tier -> mistral-medium-latest
+ * (adjust model names in .env if Mistral renames/deprecates them).
+ *
+ * Config (.env):
+ *   MISTRAL_API_KEY=your-key
+ *   MISTRAL_SMALL_MODEL=mistral-small-latest
+ *   MISTRAL_MEDIUM_MODEL=mistral-medium-latest
+ */
+class MistralService implements AIProviderInterface
 {
     private string $apiKey;
-    private string $proModel;
-    private string $flashModel;
+    private string $smallModel;
+    private string $mediumModel;
 
-    private const string BASE_URL    = 'https://generativelanguage.googleapis.com/v1beta/models';
+    private const string BASE_URL = 'https://api.mistral.ai/v1/chat/completions';
     private const int    TIMEOUT     = 120;
     private const int    RETRY_MAX   = 2;
-    private const int    RETRY_DELAY = 5_000_000;
-    private const int    MIN_REQUEST_INTERVAL_US = 4_500_000;
+    private const int    RETRY_DELAY = 3_000_000;
+
+    // Free tier is ~1 req/sec — pace conservatively to stay under it
+    private const int MIN_REQUEST_INTERVAL_US = 1_200_000;
 
     public function __construct()
     {
-        $this->apiKey     = config('import.gemini_api_key');
-        $this->proModel   = config('import.gemini_pro_model', 'gemini-2.5-pro');
-        $this->flashModel = config('import.gemini_flash_model', 'gemini-2.5-flash');
-    }
-
-    public function askProJson(string $systemPrompt, string $userPrompt): ?array
-    {
-        return $this->askJson($this->proModel, $systemPrompt, $userPrompt);
+        $this->apiKey      = config('import.mistral_api_key');
+        $this->smallModel  = config('import.mistral_small_model', 'mistral-small-latest');
+        $this->mediumModel = config('import.mistral_medium_model', 'mistral-medium-latest');
     }
 
     public function askFlashJson(string $systemPrompt, string $userPrompt): ?array
     {
-        return $this->askJson($this->flashModel, $systemPrompt, $userPrompt);
+        return $this->askJson($this->smallModel, $systemPrompt, $userPrompt);
+    }
+
+    public function askProJson(string $systemPrompt, string $userPrompt): ?array
+    {
+        return $this->askJson($this->mediumModel, $systemPrompt, $userPrompt);
     }
 
     private function askJson(string $model, string $systemPrompt, string $userPrompt): ?array
@@ -41,13 +58,12 @@ class GeminiAIStudioService implements AIProviderInterface
 
         while ($attempt < self::RETRY_MAX) {
             $attempt++;
-
             $this->pace();
 
             $raw = $this->sendRequest($model, $systemPrompt, $userPrompt);
 
             if ($raw === null) {
-                Log::channel('import')->warning('AIStudio: no response', [
+                Log::channel('import')->warning('Mistral: no response', [
                     'model' => $model, 'attempt' => $attempt,
                 ]);
                 if ($attempt < self::RETRY_MAX) usleep(self::RETRY_DELAY);
@@ -57,18 +73,18 @@ class GeminiAIStudioService implements AIProviderInterface
             $parsed = $this->parseJson($raw);
             if ($parsed !== null) return $parsed;
 
-            Log::channel('import')->warning('AIStudio: invalid JSON, retrying', [
+            Log::channel('import')->warning('Mistral: invalid JSON, retrying', [
                 'model' => $model, 'raw' => mb_substr($raw, 0, 200),
             ]);
         }
 
-        Log::channel('import')->error('AIStudio: failed after retries', ['model' => $model]);
+        Log::channel('import')->error('Mistral: failed after retries', ['model' => $model]);
         return null;
     }
 
     private function pace(): void
     {
-        $lastRequestAt = (float) Cache::get('gemini_last_request_at', 0.0);
+        $lastRequestAt = (float) Cache::get('mistral_last_request_at', 0.0);
         $elapsedUs = (microtime(true) - $lastRequestAt) * 1_000_000;
 
         if ($elapsedUs < self::MIN_REQUEST_INTERVAL_US) {
@@ -78,16 +94,14 @@ class GeminiAIStudioService implements AIProviderInterface
 
     private function sendRequest(string $model, string $systemPrompt, string $userPrompt): ?string
     {
-        $url = self::BASE_URL . "/{$model}:generateContent?key={$this->apiKey}";
-
         $payload = json_encode([
-            'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-            'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'temperature'      => 0.1,
-                'maxOutputTokens'  => 16384,
+            'model'    => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $userPrompt],
             ],
+            'response_format' => ['type' => 'json_object'],
+            'temperature'     => 0.1,
         ]);
 
         $context = stream_context_create([
@@ -95,6 +109,7 @@ class GeminiAIStudioService implements AIProviderInterface
                 'method'        => 'POST',
                 'header'        => implode("\r\n", [
                     'Content-Type: application/json',
+                    'Authorization: Bearer ' . $this->apiKey,
                     'Content-Length: ' . strlen($payload),
                 ]),
                 'content'       => $payload,
@@ -103,8 +118,8 @@ class GeminiAIStudioService implements AIProviderInterface
             ],
         ]);
 
-        $result = @file_get_contents($url, false, $context);
-        Cache::put('gemini_last_request_at', microtime(true), 600);
+        $result = @file_get_contents(self::BASE_URL, false, $context);
+        Cache::put('mistral_last_request_at', microtime(true), 600);
 
         $status = 0;
         foreach ($http_response_header ?? [] as $h) {
@@ -112,12 +127,12 @@ class GeminiAIStudioService implements AIProviderInterface
         }
 
         if ($status === 429) {
-            Log::channel('import')->error('AIStudio: RATE LIMIT HIT (429)', ['model' => $model]);
-            throw new AIRateLimitException('AI Studio rate limit (429) reached');
+            Log::channel('import')->error('Mistral: RATE LIMIT HIT (429)', ['model' => $model]);
+            throw new AIRateLimitException('Mistral rate limit (429) reached');
         }
 
         if ($result === false || $status !== 200) {
-            Log::channel('import')->error('AIStudio: HTTP request failed', [
+            Log::channel('import')->error('Mistral: HTTP request failed', [
                 'status' => $status, 'body' => $result ? mb_substr($result, 0, 300) : null,
             ]);
             return null;
@@ -126,7 +141,7 @@ class GeminiAIStudioService implements AIProviderInterface
         $data = json_decode($result, true);
         if (json_last_error() !== JSON_ERROR_NONE) return null;
 
-        return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        return $data['choices'][0]['message']['content'] ?? null;
     }
 
     private function parseJson(string $raw): ?array
@@ -140,12 +155,6 @@ class GeminiAIStudioService implements AIProviderInterface
         if ($start !== false && $end !== false && $end > $start) {
             $decoded = json_decode(substr($clean, $start, $end - $start + 1), true);
             if (json_last_error() === JSON_ERROR_NONE) return $decoded;
-        }
-
-        $start = strpos($clean, '['); $end = strrpos($clean, ']');
-        if ($start !== false && $end !== false && $end > $start) {
-            $decoded = json_decode(substr($clean, $start, $end - $start + 1), true);
-            if (json_last_error() === JSON_ERROR_NONE) return ['results' => $decoded];
         }
 
         return null;

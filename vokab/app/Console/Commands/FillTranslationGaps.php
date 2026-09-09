@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\Import\ExampleTranslator;
 use App\Services\Import\GeminiAIStudioService;
-use App\Services\Import\GeminiRateLimitException;
+use App\Services\Import\AIRateLimitException;
 use App\Services\Import\WordTranslationGapFillerService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -25,7 +25,7 @@ class FillTranslationGaps extends Command
 
         try {
             $service->run();
-        } catch (GeminiRateLimitException) {
+        } catch (AIRateLimitException) {
             $this->newLine();
             $this->warn('AI Studio daily/rate limit reached — stopping cleanly.');
             $this->info('Progress so far is saved. Re-run this command later to continue.');
