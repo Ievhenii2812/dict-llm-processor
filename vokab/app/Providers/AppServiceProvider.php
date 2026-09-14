@@ -109,7 +109,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(WordSemanticTranslatorService::class, function ($app) {
             return new WordSemanticTranslatorService(
-                ai: $app->make(GeminiAIStudioService::class),
+                ai: $app->make(AIProviderInterface::class),
                 spacy: $app->make(SpacyService::class),
                 splitter: $app->make(CompoundSplitterService::class),
                 translator: $app->make(ExampleTranslator::class),
@@ -119,12 +119,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(PhraseTranslatorService::class, function ($app) {
             return new PhraseTranslatorService(
                 $app->make(ExampleTranslator::class),
-                $app->make(GeminiAIStudioService::class),
+                $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(HomonymTranslatorService::class, function ($app) {
-            return new HomonymTranslatorService($app->make(GeminiAIStudioService::class));
+            return new HomonymTranslatorService($app->make(AIProviderInterface::class));
         });
 
         $this->app->singleton(LeipzigSentencesParser::class);
@@ -133,7 +133,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(WordTranslationGapFillerService::class, function ($app) {
             return new WordTranslationGapFillerService(
-                ai: $app->make(GeminiAIStudioService::class),
+                ai: $app->make(AIProviderInterface::class),
                 translator: $app->make(ExampleTranslator::class),
             );
         });
