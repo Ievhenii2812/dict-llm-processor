@@ -2,8 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Services\Import\ExampleTranslator;
-use App\Services\Import\GeminiAIStudioService;
 use App\Services\Import\AIRateLimitException;
 use App\Services\Import\WordTranslationGapFillerService;
 use Illuminate\Console\Attributes\Description;
@@ -18,10 +16,7 @@ class FillTranslationGaps extends Command
     {
         $this->info('Filling translation gaps (ru/uk translations via AI Studio, glosses via NLLB)...');
 
-        $service = new WordTranslationGapFillerService(
-            ai:         app(GeminiAIStudioService::class),
-            translator: app(ExampleTranslator::class),
-        );
+        $service = app(WordTranslationGapFillerService::class);
 
         try {
             $service->run();

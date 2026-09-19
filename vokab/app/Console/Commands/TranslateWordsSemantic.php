@@ -2,15 +2,11 @@
 
 namespace App\Console\Commands;
 
-use App\Services\Import\GeminiAIStudioService;
 use App\Services\Import\AIRateLimitException;
 use App\Services\Import\WordSemanticTranslatorService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use App\Services\Import\SpacyService;
-use App\Services\Import\CompoundSplitterService;
-use App\Services\Import\ExampleTranslator;
 
 #[Signature('import:translate-words')]
 #[Description('Translate non-homonym words with meanings, gloss via Gemini Flash (AI Studio)')]
@@ -20,12 +16,7 @@ class TranslateWordsSemantic extends Command
     {
         $this->info('Translating words (semantic, multi-meaning) via Gemini Flash (AI Studio)...');
 
-        $service = new WordSemanticTranslatorService(
-            ai:         app(GeminiAIStudioService::class),
-            spacy:      app(SpacyService::class),
-            splitter:   app(CompoundSplitterService::class),
-            translator: app(ExampleTranslator::class),
-        );
+        $service = app(WordSemanticTranslatorService::class);
 
         try {
             $service->run();

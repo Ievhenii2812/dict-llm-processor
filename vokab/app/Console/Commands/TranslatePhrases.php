@@ -2,11 +2,7 @@
 
 namespace App\Console\Commands;
 
-namespace App\Console\Commands;
-
-use App\Services\Import\ExampleTranslator;
 use App\Services\Import\PhraseTranslatorService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -19,10 +15,7 @@ class TranslatePhrases extends Command
     {
         $this->info('Translating phrases: EasyNMT meanings + Gemini Pro analogues...');
 
-        $service = new PhraseTranslatorService(
-            translator: app(ExampleTranslator::class),
-            vertex:     app(VertexAIService::class),
-        );
+        $service = app(PhraseTranslatorService::class);
 
         $service->run();
 

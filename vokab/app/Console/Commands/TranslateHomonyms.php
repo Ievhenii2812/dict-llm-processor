@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Import\HomonymTranslatorService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,7 +15,7 @@ class TranslateHomonyms extends Command
     {
         $this->info('Translating homonyms via Gemini Flash (context-aware)...');
 
-        $service = new HomonymTranslatorService(app(VertexAIService::class));
+        $service = app(HomonymTranslatorService::class);
         $service->run();
 
         $this->info('Done. Details: storage/logs/import/');

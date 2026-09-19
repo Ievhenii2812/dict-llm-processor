@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 class ExampleFillerService
 {
@@ -37,7 +38,7 @@ PROMPT;
         private readonly LeipzigSentencesParser $leipzig,
         private readonly ExampleTranslator      $translator,
         private readonly WordSaver              $saver,
-        private readonly VertexAIService        $vertex,
+        private readonly AIProviderInterface    $vertex,
     ) {}
 
     public function run(): void

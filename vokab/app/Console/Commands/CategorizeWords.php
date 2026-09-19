@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Import\CategorizationService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,7 +15,7 @@ class CategorizeWords extends Command
     {
         $this->info('Starting word categorization via Gemini Pro...');
 
-        $service = new CategorizationService(app(VertexAIService::class));
+        $service = app(CategorizationService::class);
         $service->run();
 
         $this->info('Done. Details: storage/logs/import/');

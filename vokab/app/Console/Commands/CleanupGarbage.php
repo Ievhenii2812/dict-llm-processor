@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Import\GarbageCleanupService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,7 +15,7 @@ class CleanupGarbage extends Command
     {
         $this->info('Starting garbage cleanup via Gemini Flash...');
 
-        $service = new GarbageCleanupService(app(VertexAIService::class));
+        $service = app(GarbageCleanupService::class);
         $service->run();
 
         $this->info('Done. Details: storage/logs/import/');

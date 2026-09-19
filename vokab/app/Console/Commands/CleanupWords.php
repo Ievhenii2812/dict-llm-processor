@@ -3,8 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Import\CleanupService;
-use App\Services\Import\SpacyService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -19,10 +17,7 @@ class CleanupWords extends Command
         $this->info('Порядок: имена собственные → дубли регистра → служебные омонимы → дубли частей речи');
         $this->info('');
 
-        $service = new CleanupService(
-            spacy:  app(SpacyService::class),
-            vertex: app(VertexAIService::class),
-        );
+        $service = app(CleanupService::class);
 
         $service->run();
 

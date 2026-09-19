@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use Illuminate\Support\Facades\Log;
 use Google\Auth\Credentials\ServiceAccountCredentials;
+use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
  * Vertex AI REST client authenticated via service account JSON.
@@ -11,7 +12,7 @@ use Google\Auth\Credentials\ServiceAccountCredentials;
  * Uses google/auth (lightweight, pure PHP) for OAuth2 authentication.
  * No Context Caching — our request volume is below Vertex AI minimum.
  */
-class VertexAIService
+class VertexAIService implements AIProviderInterface
 {
     private string  $project;
     private string  $location;

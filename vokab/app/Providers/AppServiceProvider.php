@@ -56,24 +56,24 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CleanupService::class, function ($app) {
             return new CleanupService(
                 spacy: $app->make(SpacyService::class),
-                vertex: $app->make(VertexAIService::class),
+                vertex: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(GarbageCleanupService::class, function ($app) {
             return new GarbageCleanupService(
-                vertex: $app->make(VertexAIService::class),
+                vertex: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(CategorizationService::class, function ($app) {
             return new CategorizationService(
-                vertex: $app->make(VertexAIService::class),
+                vertex: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(CefrAssignmentService::class, function ($app) {
-            return new CefrAssignmentService($app->make(VertexAIService::class));
+            return new CefrAssignmentService($app->make(AIProviderInterface::class));
         });
 
         // ── Stage 2: translation and enrichment ───────────────────────────────
@@ -89,15 +89,16 @@ class AppServiceProvider extends ServiceProvider
                 leipzig: $app->make(LeipzigSentencesParser::class),
                 translator: $app->make(ExampleTranslator::class),
                 saver: $app->make(WordSaver::class),
-                vertex: $app->make(VertexAIService::class),
+                vertex: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(AIProviderInterface::class, function ($app) {
             return match (config('import.ai_provider', 'gemini')) {
                 'mistral' => $app->make(MistralService::class),
-                'groq' => $app->make(GroqService::class),
-                default => $app->make(GeminiAIStudioService::class),
+                'groq'    => $app->make(GroqService::class),
+                'vertex'  => $app->make(VertexAIService::class),
+                default   => $app->make(GeminiAIStudioService::class),
             };
         });
 

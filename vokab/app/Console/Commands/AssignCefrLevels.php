@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Import\CefrAssignmentService;
-use App\Services\Import\VertexAIService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,7 +15,7 @@ class AssignCefrLevels extends Command
     {
         $this->info('Assigning CEFR levels via Gemini Flash...');
 
-        $service = new CefrAssignmentService(app(VertexAIService::class));
+        $service = app(CefrAssignmentService::class);
         $service->run();
 
         $this->info('Done. Details: storage/logs/import/');
