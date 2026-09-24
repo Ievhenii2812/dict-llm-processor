@@ -182,40 +182,39 @@ class WordSaver
         string $sentence,
         bool   $isAiGenerated = false,
     ): void {
-        // Переводим
-        $translations = ['en' => null, 'ru' => null, 'uk' => null];
+        DB::transaction(function () use ($wordExternalId, $sentence, $isAiGenerated) {
+            $translations = ['en' => null, 'ru' => null, 'uk' => null];
 
-        // Получаем или создаём пример (защита от дублей по тексту)
-        $existing = Example::where('sentence', $sentence)->first();
+            $existing = Example::where('sentence', $sentence)->first();
 
-        if ($existing !== null) {
-            $exampleExternalId = $existing->external_id;
-        } else {
-            $externalId = $this->nextExampleExternalId();
+            if ($existing !== null) {
+                $exampleExternalId = $existing->external_id;
+            } else {
+                $externalId = $this->nextExampleExternalId();
 
-            $example = Example::create([
-                'external_id'    => $externalId,
-                'sentence'       => $sentence,
-                'is_ai_generated' => $isAiGenerated,
-                'translation_en' => $translations['en'],
-                'translation_ru' => $translations['ru'],
-                'translation_uk' => $translations['uk'],
+                $example = Example::create([
+                    'external_id'    => $externalId,
+                    'sentence'       => $sentence,
+                    'is_ai_generated' => $isAiGenerated,
+                    'translation_en' => $translations['en'],
+                    'translation_ru' => $translations['ru'],
+                    'translation_uk' => $translations['uk'],
+                ]);
+
+                $exampleExternalId = $example->external_id;
+
+                Log::channel('import')->debug('Example saved', [
+                    'external_id'    => $externalId,
+                    'is_ai_generated' => $isAiGenerated,
+                    'sentence'       => mb_substr($sentence, 0, 60),
+                ]);
+            }
+
+            ExampleWord::firstOrCreate([
+                'external_word_id'    => $wordExternalId,
+                'external_example_id' => $exampleExternalId,
             ]);
-
-            $exampleExternalId = $example->external_id;
-
-            Log::channel('import')->debug('Example saved', [
-                'external_id'    => $externalId,
-                'is_ai_generated' => $isAiGenerated,
-                'sentence'       => mb_substr($sentence, 0, 60),
-            ]);
-        }
-
-        // Связь слово ↔ пример (игнорируем дубль если уже есть)
-        ExampleWord::firstOrCreate([
-            'external_word_id'    => $wordExternalId,
-            'external_example_id' => $exampleExternalId,
-        ]);
+        });
     }
 
     /**
@@ -231,38 +230,40 @@ class WordSaver
         array  $translations,
         bool   $isAiGenerated = false,
     ): void {
-        $existing = Example::where('sentence', $sentence)->first();
+        DB::transaction(function () use ($wordExternalId, $sentence, $translations, $isAiGenerated) {
+            $existing = Example::where('sentence', $sentence)->first();
 
-        if ($existing !== null) {
-            $exampleExternalId = $existing->external_id;
-        } else {
-            $externalId = $this->nextExampleExternalId();
+            if ($existing !== null) {
+                $exampleExternalId = $existing->external_id;
+            } else {
+                $externalId = $this->nextExampleExternalId();
 
-            $example = Example::create([
-                'external_id'     => $externalId,
-                'sentence'        => $sentence,
-                'is_ai_generated' => $isAiGenerated,
-                'translation_en'  => $translations['en'] ?? null,
-                'translation_ru'  => $translations['ru'] ?? null,
-                'translation_uk'  => $translations['uk'] ?? null,
+                $example = Example::create([
+                    'external_id'     => $externalId,
+                    'sentence'        => $sentence,
+                    'is_ai_generated' => $isAiGenerated,
+                    'translation_en'  => $translations['en'] ?? null,
+                    'translation_ru'  => $translations['ru'] ?? null,
+                    'translation_uk'  => $translations['uk'] ?? null,
+                ]);
+
+                $exampleExternalId = $example->external_id;
+
+                Log::channel('import')->debug('Example saved (with translations)', [
+                    'external_id'    => $externalId,
+                    'is_ai_generated' => $isAiGenerated,
+                    'has_en'         => !empty($translations['en']),
+                    'has_ru'         => !empty($translations['ru']),
+                    'has_uk'         => !empty($translations['uk']),
+                    'sentence'       => mb_substr($sentence, 0, 60),
+                ]);
+            }
+
+            ExampleWord::firstOrCreate([
+                'external_word_id'    => $wordExternalId,
+                'external_example_id' => $exampleExternalId,
             ]);
-
-            $exampleExternalId = $example->external_id;
-
-            Log::channel('import')->debug('Example saved (with translations)', [
-                'external_id'    => $externalId,
-                'is_ai_generated' => $isAiGenerated,
-                'has_en'         => !empty($translations['en']),
-                'has_ru'         => !empty($translations['ru']),
-                'has_uk'         => !empty($translations['uk']),
-                'sentence'       => mb_substr($sentence, 0, 60),
-            ]);
-        }
-
-        ExampleWord::firstOrCreate([
-            'external_word_id'    => $wordExternalId,
-            'external_example_id' => $exampleExternalId,
-        ]);
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -283,29 +284,29 @@ class WordSaver
 
     private function saveOneIdiom(string $phrase, string $meaningDe): void
     {
-        // Проверяем в PHP перед вставкой (phrase — TEXT, без UNIQUE индекса)
-        $exists = Phrase::whereRaw('phrase = ?', [$phrase])->exists();
+        DB::transaction(function () use ($phrase, $meaningDe) {
+            $exists = Phrase::whereRaw('phrase = ?', [$phrase])->exists();
 
-        if ($exists) {
-            Log::channel('import')->debug('Phrase already exists, skipped', [
-                'phrase' => mb_substr($phrase, 0, 60),
+            if ($exists) {
+                Log::channel('import')->debug('Phrase already exists, skipped', [
+                    'phrase' => mb_substr($phrase, 0, 60),
+                ]);
+                return;
+            }
+
+            $externalId = $this->nextPhraseExternalId();
+
+            Phrase::create([
+                'external_id' => $externalId,
+                'phrase'      => $phrase,
+                'meaning_de'  => $meaningDe,
             ]);
-            return;
-        }
 
-        $externalId = $this->nextPhraseExternalId();
-
-        Phrase::create([
-            'external_id' => $externalId,
-            'phrase'      => $phrase,
-            'meaning_de'  => $meaningDe,
-            // остальные поля заполнит Этап 2
-        ]);
-
-        Log::channel('import')->debug('Phrase saved', [
-            'external_id' => $externalId,
-            'phrase'      => mb_substr($phrase, 0, 60),
-        ]);
+            Log::channel('import')->debug('Phrase saved', [
+                'external_id' => $externalId,
+                'phrase'      => mb_substr($phrase, 0, 60),
+            ]);
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -319,19 +320,34 @@ class WordSaver
      */
     private function nextExternalId(): int
     {
-        $max = DB::table('words')->max('external_id');
+        $max = DB::table('words')
+            ->lockForUpdate()
+            ->orderByDesc('external_id')
+            ->limit(1)
+            ->value('external_id');
+
         return ($max ?? 0) + 1;
     }
 
     private function nextExampleExternalId(): int
     {
-        $max = DB::table('examples')->max('external_id');
+        $max = DB::table('examples')
+            ->lockForUpdate()
+            ->orderByDesc('external_id')
+            ->limit(1)
+            ->value('external_id');
+
         return ($max ?? 0) + 1;
     }
 
     private function nextPhraseExternalId(): int
     {
-        $max = DB::table('phrases')->max('external_id');
+        $max = DB::table('phrases')
+            ->lockForUpdate()
+            ->orderByDesc('external_id')
+            ->limit(1)
+            ->value('external_id');
+
         return ($max ?? 0) + 1;
     }
 }
