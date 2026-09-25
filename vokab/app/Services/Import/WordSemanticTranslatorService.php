@@ -181,7 +181,9 @@ PROMPT;
             return $analysis->isKnown ? $analysis->lemma : $segment;
         }, $rawSegments);
 
-        $partWords = collect($lemmatizedSegments)->map(fn($s) => Word::where('word', $s)->first());
+        $partWords = collect($lemmatizedSegments)->map(
+            fn($s) => Word::where('word', $s)->whereNull('homonym_index')->first()
+        );
 
         $allPartsExist = $partWords->every(fn($w) => $w !== null);
 

@@ -14,7 +14,7 @@ class IndexLeipzigSentences extends Command
     public function handle(): int
     {
         $this->info('Indexing Leipzig sentences dump...');
-        $this->info('Expected file at path set in LEIPZIG_SENTENCES_FILE (.env)');
+        $this->info('Expected files at paths set in LEIPZIG_SENTENCES_NEWS_FILE / LEIPZIG_SENTENCES_WEB_FILE (.env)');
 
         $indexer = new LeipzigSentencesIndexer();
         $indexer->run();

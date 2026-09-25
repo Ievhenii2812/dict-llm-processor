@@ -129,8 +129,6 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(LeipzigSentencesParser::class);
 
-        $this->app->singleton(GeminiAIStudioService::class);
-
         $this->app->singleton(WordTranslationGapFillerService::class, function ($app) {
             return new WordTranslationGapFillerService(
                 ai: $app->make(AIProviderInterface::class),
