@@ -24,9 +24,9 @@ enum PartOfSpeech: int
 
         return match(true) {
             str_contains($label, 'substantiv')  => self::Noun,
+            str_contains($label, 'adverb')      => self::Adverb,
             str_contains($label, 'verb')        => self::Verb,
             str_contains($label, 'adjektiv')    => self::Adjective,
-            str_contains($label, 'adverb')      => self::Adverb,
             str_contains($label, 'präposition') => self::Preposition,
             str_contains($label, 'konjunktion') => self::Conjunction,
             str_contains($label, 'pronomen')    => self::Pronoun,
