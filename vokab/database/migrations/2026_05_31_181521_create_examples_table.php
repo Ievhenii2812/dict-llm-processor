@@ -19,12 +19,12 @@ return new class extends Migration
             /*
              * Source flag.
              * false = real corpus sentence (from Wiktionary Beispiele)
-             * true  = AI-generated sentence (Stage 2, gap-filling via Ollama)
+             * true  = AI-generated sentence (Stage 2, gap-filling via the configured AI provider)
              * Used for quality control and future corpus revision.
              */
             $table->boolean('is_ai_generated')->default(false);
 
-            // LibreTranslate-populated (Stage 1) or null on translation failure
+            // Populated via the local translator container (CTranslate2 + NLLB-200), Stage 1; null on translation failure
             $table->text('translation_en')->nullable();
             $table->text('translation_ru')->nullable();
             $table->text('translation_uk')->nullable();

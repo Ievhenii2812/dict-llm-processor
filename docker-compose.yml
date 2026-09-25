@@ -32,14 +32,12 @@ services:
     image: postgres:17.5
     restart: always
     shm_size: 1024mb
+    env_file:
+      - vokab/.env
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: dl_eugene
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: vokab
     ports:
-      - 5432:5432
+      - "127.0.0.1:5432:5432"
     container_name: vokab_db
 
   translator:

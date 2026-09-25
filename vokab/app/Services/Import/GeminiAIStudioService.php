@@ -21,8 +21,8 @@ class GeminiAIStudioService implements AIProviderInterface
     public function __construct()
     {
         $this->apiKey     = config('import.gemini_api_key');
-        $this->proModel   = config('import.gemini_pro_model', 'gemini-2.5-pro');
-        $this->flashModel = config('import.gemini_flash_model', 'gemini-2.5-flash');
+        $this->proModel   = config('import.gemini_pro_model', 'gemini-3.1-pro');
+        $this->flashModel = config('import.gemini_flash_model', 'gemini-3.6-flash');
     }
 
     public function askProJson(string $systemPrompt, string $userPrompt): ?array
