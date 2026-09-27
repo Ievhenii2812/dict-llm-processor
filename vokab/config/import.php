@@ -23,6 +23,6 @@ return [
     'mistral_medium_model'        => env('MISTRAL_MEDIUM_MODEL', 'mistral-medium-latest'),
 
     'groq_api_key'                => env('GROQ_API_KEY'),
-    'groq_flash_model'            => env('GROQ_FLASH_MODEL', 'llama-3.1-8b-instant'),
-    'groq_pro_model'              => env('GROQ_PRO_MODEL', 'llama-3.3-70b-versatile'),
+    'groq_flash_model'            => env('GROQ_FLASH_MODEL', 'openai/gpt-oss-20b'),
+    'groq_pro_model'              => env('GROQ_PRO_MODEL', 'openai/gpt-oss-120b'),
 ];
