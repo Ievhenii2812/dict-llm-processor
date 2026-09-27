@@ -127,7 +127,10 @@ class MistralService implements AIProviderInterface
         }
 
         if ($status === 429) {
-            Log::channel('import')->error('Mistral: RATE LIMIT HIT (429)', ['model' => $model]);
+            Log::channel('import')->error('Mistral: RATE LIMIT HIT (429)', [
+                'model' => $model,
+                'body'  => $result ? mb_substr($result, 0, 300) : null,
+            ]);
             throw new AIRateLimitException('Mistral rate limit (429) reached');
         }
 

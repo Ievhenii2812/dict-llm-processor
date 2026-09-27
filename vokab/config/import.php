@@ -7,7 +7,7 @@ return [
     'google_credentials_path'     => env('GOOGLE_APPLICATION_CREDENTIALS'),
     'google_cloud_project'        => env('GOOGLE_CLOUD_PROJECT'),
     'google_cloud_location'       => env('GOOGLE_CLOUD_LOCATION', 'us-east5'),
-    'gemini_pro_model'            => env('GEMINI_PRO_MODEL', 'gemini-3.1-pro'),
+    'gemini_pro_model'            => env('GEMINI_PRO_MODEL', 'gemini-3.1-pro-preview'),
     'gemini_flash_model'          => env('GEMINI_FLASH_MODEL', 'gemini-3.6-flash'),
     'gemini_api_key'              => env('GEMINI_API_KEY'),
     'spacy_url' => env('SPACY_URL', 'http://vokab_lemmatizer:8000'),

@@ -134,31 +134,30 @@ class VertexAIService implements AIProviderInterface
 
         $context = stream_context_create([
             'http' => [
-                'method'  => 'POST',
-                'header'  => implode("\r\n", [
+                'method'        => 'POST',
+                'header'        => implode("\r\n", [
                     'Content-Type: application/json',
                     'Authorization: Bearer ' . $token,
                     'Content-Length: ' . strlen($payload),
                 ]),
-                'content' => $payload,
-                'timeout' => self::TIMEOUT,
+                'content'       => $payload,
+                'timeout'       => self::TIMEOUT,
+                'ignore_errors' => true,
             ],
         ]);
 
         $result = @file_get_contents($url, false, $context);
 
-        if ($result === false) {
-            $status = '';
-            foreach ($http_response_header ?? [] as $h) {
-                if (str_starts_with($h, 'HTTP/')) {
-                    $status = $h;
-                    break;
-                }
-            }
+        $status = 0;
+        foreach ($http_response_header ?? [] as $h) {
+            if (preg_match('#^HTTP/\S+\s+(\d+)#', $h, $m)) { $status = (int) $m[1]; break; }
+        }
 
+        if ($result === false || $status !== 200) {
             Log::channel('import')->error('VertexAI: HTTP request failed', [
                 'url'    => $url,
                 'status' => $status,
+                'body'   => $result ? mb_substr($result, 0, 300) : null,
             ]);
             return null;
         }
