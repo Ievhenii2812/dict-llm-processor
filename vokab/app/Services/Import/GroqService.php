@@ -28,6 +28,8 @@ class GroqService implements AIProviderInterface
     private string $apiKey;
     private string $flashModel;
     private string $proModel;
+    private string $reasoningEffort;
+    private int    $maxTokens;
 
     private const string BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
     private const int    TIMEOUT     = 120;
@@ -39,9 +41,11 @@ class GroqService implements AIProviderInterface
 
     public function __construct()
     {
-        $this->apiKey     = config('import.groq_api_key');
-        $this->flashModel = config('import.groq_flash_model', 'llama-3.1-8b-instant');
-        $this->proModel   = config('import.groq_pro_model', 'llama-3.3-70b-versatile');
+        $this->apiKey          = config('import.groq_api_key');
+        $this->flashModel      = config('import.groq_flash_model', 'openai/gpt-oss-20b');
+        $this->proModel        = config('import.groq_pro_model', 'openai/gpt-oss-120b');
+        $this->reasoningEffort = (string) config('import.groq_reasoning_effort', 'low');
+        $this->maxTokens       = (int) config('import.groq_max_tokens', 8192);
     }
 
     public function askFlashJson(string $systemPrompt, string $userPrompt): ?array
@@ -96,15 +100,23 @@ class GroqService implements AIProviderInterface
 
     private function sendRequest(string $model, string $systemPrompt, string $userPrompt): ?string
     {
-        $payload = json_encode([
+        $body = [
             'model'    => $model,
             'messages' => [
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user',   'content' => $userPrompt],
             ],
-            'response_format' => ['type' => 'json_object'],
-            'temperature'     => 0.1,
-        ]);
+            'response_format'       => ['type' => 'json_object'],
+            'temperature'           => 0.1,
+            // gpt-oss иначе тратит весь бюджет на рассуждения и отдаёт пустой content
+            'max_completion_tokens' => $this->maxTokens,
+        ];
+
+        if ($this->reasoningEffort !== '') {
+            $body['reasoning_effort'] = $this->reasoningEffort;
+        }
+
+        $payload = json_encode($body);
 
         $context = stream_context_create([
             'http' => [
