@@ -8,12 +8,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:fill-examples')]
-#[Description('Fill words with < 5 examples: Tatoeba first, Gemini Flash fallback')]
+#[Description('Fill words with < 5 examples: Tatoeba first, AI provider fallback')]
 class FillExamples extends Command
 {
     public function handle(): int
     {
-        $this->info('Filling examples: Tatoeba → Gemini Flash fallback...');
+        $this->info('Filling examples: Tatoeba → ' . config('import.ai_provider') . ' fallback...');
 
         $service = app(ExampleFillerService::class);
 

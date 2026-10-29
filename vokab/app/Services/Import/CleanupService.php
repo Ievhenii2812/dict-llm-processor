@@ -16,7 +16,7 @@ use App\Services\Import\Contracts\AIProviderInterface;
  *   1. Proper nouns (Problem 2) — remove garbage first
  *   2. Case duplicates (Problem 3) — merge der/Der
  *   3. Redundant homonyms (Problem 4) — merge service parts of speech
- *   4. POS duplicates (Problem 1) — Gemini Pro decides
+ *   4. POS duplicates (Problem 1) — Pro model decides
  */
 class CleanupService
 {
@@ -189,12 +189,12 @@ class CleanupService
     }
 
     // -------------------------------------------------------------------------
-    // Problem 1: POS duplicates (Rolle x4) — Gemini Pro decides
+    // Problem 1: POS duplicates (Rolle x4) — Pro model decides
     // -------------------------------------------------------------------------
 
     private function mergePartOfSpeechDuplicates(): void
     {
-        Log::channel('import')->info('Cleanup: checking POS duplicates via Gemini Pro...');
+        Log::channel('import')->info('Cleanup: checking POS duplicates via the AI provider...');
 
         $count = 0;
 
@@ -258,7 +258,7 @@ PROMPT;
                     $merged++;
                 }
 
-                Log::channel('import')->debug('POS duplicates merged by Gemini', [
+                Log::channel('import')->debug('POS duplicates merged by the AI provider', [
                     'word'   => $wordText,
                     'pos'    => $posName,
                     'reason' => $result['reason'] ?? '',

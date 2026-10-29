@@ -88,7 +88,7 @@ PROMPT;
         $result = $this->ai->askProJson(self::SYSTEM_PROMPT, $prompt);
 
         if ($result === null) {
-            Log::channel('import')->warning('PhraseTranslator: no analogues from AI Studio', [
+            Log::channel('import')->warning('PhraseTranslator: no analogues from the AI provider', [
                 'phrase' => mb_substr($phraseText, 0, 60),
             ]);
             return null;

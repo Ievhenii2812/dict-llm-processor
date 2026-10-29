@@ -8,12 +8,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:categorize')]
-#[Description('Categorize words into thematic groups via Gemini Pro (Vertex AI)')]
+#[Description('Categorize words into thematic groups via the configured AI provider')]
 class CategorizeWords extends Command
 {
     public function handle(): int
     {
-        $this->info('Starting word categorization via Gemini Pro...');
+        $this->info('Starting word categorization via ' . config('import.ai_provider') . '...');
 
         $service = app(CategorizationService::class);
         $service->run();

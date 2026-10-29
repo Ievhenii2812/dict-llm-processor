@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
- * Assigns CEFR levels (A1-C2) to German words using Gemini Flash via Vertex AI.
+ * Assigns CEFR levels (A1-C2) to German words using AI provider.
  *
  * Uses flat JSON response format {"word": "level"} instead of
  * {"results": [{"word": "...", "cefr_level": "..."}]} —

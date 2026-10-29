@@ -7,21 +7,24 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Groq API client (free tier).
+ * Groq API client.
  *
- * Free tier: ~30 requests/min, ~14,400 requests/day, 500k tokens/day
- * (Llama 3.1 8B Instant tier). Open-source models (Llama, Qwen3,
- * Mixtral, GPT-OSS), not proprietary — quality for structured JSON
- * tasks should be verified against Gemini/Mistral output before
- * relying on it for anything quality-sensitive.
+ * Free plan limits for openai/gpt-oss-20b and -120b (see console Settings -> Limits):
+ * 30 requests/min, 1K requests/day, 8K tokens/min, 200K tokens/day.
+ * The per-minute token limit is the practical bottleneck, so 429 responses with a
+ * short wait are waited out; long waits (daily limit) abort the run.
  *
- * "Flash" tier -> a fast small model, "Pro" tier -> a larger one.
- * Adjust model names in .env as Groq's model lineup changes.
+ * "Flash" tier -> openai/gpt-oss-20b, "Pro" tier -> openai/gpt-oss-120b.
+ * Both are reasoning models: reasoning_effort and max_completion_tokens are set
+ * explicitly, otherwise reasoning can use up the whole budget and leave the
+ * content empty (json_validate_failed).
  *
  * Config (.env):
  *   GROQ_API_KEY=your-key
- *   GROQ_FLASH_MODEL=llama-3.1-8b-instant
- *   GROQ_PRO_MODEL=llama-3.3-70b-versatile
+ *   GROQ_FLASH_MODEL=openai/gpt-oss-20b
+ *   GROQ_PRO_MODEL=openai/gpt-oss-120b
+ *   GROQ_REASONING_EFFORT=low
+ *   GROQ_MAX_TOKENS=8192
  */
 class GroqService implements AIProviderInterface
 {
@@ -35,6 +38,10 @@ class GroqService implements AIProviderInterface
     private const int    TIMEOUT     = 120;
     private const int    RETRY_MAX   = 2;
     private const int    RETRY_DELAY = 2_000_000;
+
+    // 429 handling: wait out short per-minute limits, abort on long (daily) ones
+    private const int RATE_LIMIT_MAX_WAIT_S = 70;
+    private const int RATE_LIMIT_RETRIES    = 3;
 
     // Free tier ~30 req/min — pace conservatively
     private const int MIN_REQUEST_INTERVAL_US = 2_100_000;
@@ -98,7 +105,7 @@ class GroqService implements AIProviderInterface
         }
     }
 
-    private function sendRequest(string $model, string $systemPrompt, string $userPrompt): ?string
+    private function sendRequest(string $model, string $systemPrompt, string $userPrompt, int $rateLimitAttempt = 0): ?string
     {
         $body = [
             'model'    => $model,
@@ -108,7 +115,7 @@ class GroqService implements AIProviderInterface
             ],
             'response_format'       => ['type' => 'json_object'],
             'temperature'           => 0.1,
-            // gpt-oss иначе тратит весь бюджет на рассуждения и отдаёт пустой content
+            // gpt-oss otherwise spends the whole budget on reasoning and returns empty content
             'max_completion_tokens' => $this->maxTokens,
         ];
 
@@ -141,7 +148,22 @@ class GroqService implements AIProviderInterface
         }
 
         if ($status === 429) {
-            Log::channel('import')->error('Groq: RATE LIMIT HIT (429)', ['model' => $model]);
+            $wait = $this->rateLimitWaitSeconds($http_response_header ?? [], $result ?: null);
+
+            Log::channel('import')->error('Groq: RATE LIMIT HIT (429)', [
+                'model'  => $model,
+                'wait_s' => $wait,
+                'body'   => $result ? mb_substr($result, 0, 300) : null,
+            ]);
+
+            if ($wait !== null
+                && $wait <= self::RATE_LIMIT_MAX_WAIT_S
+                && $rateLimitAttempt < self::RATE_LIMIT_RETRIES
+            ) {
+                sleep((int) ceil($wait) + 1);
+                return $this->sendRequest($model, $systemPrompt, $userPrompt, $rateLimitAttempt + 1);
+            }
+
             throw new AIRateLimitException('Groq rate limit (429) reached');
         }
 
@@ -156,6 +178,33 @@ class GroqService implements AIProviderInterface
         if (json_last_error() !== JSON_ERROR_NONE) return null;
 
         return $data['choices'][0]['message']['content'] ?? null;
+    }
+
+    /**
+     * Seconds to wait before retrying, from the Retry-After header or the
+     * "try again in 7.66s / 1m23s / 450ms" text in the error body.
+     * Returns null if neither is present (caller then aborts as before).
+     */
+    private function rateLimitWaitSeconds(array $headers, ?string $body): ?float
+    {
+        foreach ($headers as $h) {
+            if (preg_match('/^retry-after:\s*(\d+(?:\.\d+)?)/i', $h, $m)) {
+                return (float) $m[1];
+            }
+        }
+
+        if (
+            $body !== null
+            && preg_match('/try again in\s+(?:(\d+)h)?(?:(\d+)m(?!s))?(?:(\d+(?:\.\d+)?)(ms|s))?/i', $body, $m)
+        ) {
+            $seconds = (int) ($m[1] ?? 0) * 3600 + (int) ($m[2] ?? 0) * 60;
+            if (($m[3] ?? '') !== '') {
+                $seconds += strtolower($m[4]) === 'ms' ? (float) $m[3] / 1000 : (float) $m[3];
+            }
+            return $seconds > 0 ? $seconds : null;
+        }
+
+        return null;
     }
 
     private function parseJson(string $raw): ?array
