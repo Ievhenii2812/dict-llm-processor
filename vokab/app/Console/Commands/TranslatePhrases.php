@@ -8,12 +8,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:translate-phrases')]
-#[Description('Translate idiom meanings via EasyNMT, find analogues via Gemini Pro')]
+#[Description('Translate idiom meanings via the local translator (NLLB), find analogues via the configured AI provider')]
 class TranslatePhrases extends Command
 {
     public function handle(): int
     {
-        $this->info('Translating phrases: EasyNMT meanings + Gemini Pro analogues...');
+        $this->info('Translating phrases: NLLB meanings + ' . config('import.ai_provider') . ' analogues...');
 
         $service = app(PhraseTranslatorService::class);
 

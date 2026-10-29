@@ -10,7 +10,7 @@ namespace App\Services\Import\Contracts;
  * than a code change in every service.
  *
  * "Flash" naming is kept for the fast/cheap tier across providers
- * (Gemini Flash, Mistral Small, Groq Llama-8B), "Pro" for the
+ * (Gemini Flash, Mistral Small, Groq), "Pro" for the
  * higher-quality tier (Gemini Pro, Mistral Medium/Large, Groq larger models).
  */
 interface AIProviderInterface

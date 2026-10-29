@@ -3,7 +3,6 @@
 namespace App\Services\Import;
 
 use App\Models\Word;
-use App\Services\Import\GeminiAIStudioService;
 use Illuminate\Support\Facades\Log;
 use App\Services\Import\Contracts\AIProviderInterface;
 
@@ -11,11 +10,11 @@ use App\Services\Import\Contracts\AIProviderInterface;
  * Fills translation gaps for words that already went through
  * WordSemanticTranslatorService but ended up with a partial result
  * (typically translation_en filled, translation_ru/uk missing) —
- * a known side effect of JSON truncation on large Gemini responses.
+ * a known side effect of JSON truncation on large AI models responses.
  *
  * Two separate fill strategies, matching what each field actually needs:
  *
- *   - translation_ru/uk: re-queried from Gemini Flash with a lightweight
+ *   - translation_ru/uk: re-queried from AI provider with a lightweight
  *     translate-only prompt (no morphology/segmentation — the word
  *     already passed that stage). Cannot use NLLB here: these are
  *     comma-separated MULTIPLE meanings (polysemy), and NLLB would
@@ -24,7 +23,7 @@ use App\Services\Import\Contracts\AIProviderInterface;
  *   - gloss_ru/uk: filled via NLLB from the existing gloss_en — a gloss
  *     is a single coherent sentence, not a meaning list, so a plain
  *     translation is accurate and this is free/instant instead of
- *     spending another Gemini call.
+ *     spending another AI model call.
  *
  * Idempotent: only processes words with translation_en set but
  * translation_ru or translation_uk still null.
@@ -72,7 +71,7 @@ PROMPT;
             $this->fillTranslationGaps($words->all());
         });
 
-        // Glosses handled separately via NLLB — cheap, no need to batch by Gemini limits
+        // Glosses handled separately via NLLB — cheap, no need to batch by AI provider limits
         $this->fillGlossGaps();
 
         Log::channel('import')->info('=== WordTranslationGapFillerService finished ===', [
@@ -84,7 +83,7 @@ PROMPT;
 
     private function fillTranslationGaps(array $words): void
     {
-        // Only ask Gemini about words actually missing ru or uk
+        // Only ask AI provider about words actually missing ru or uk
         $needy = array_filter($words, fn($w) => $w->translation_ru === null || $w->translation_uk === null);
 
         if (empty($needy)) {

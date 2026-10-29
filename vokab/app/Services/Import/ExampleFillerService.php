@@ -63,7 +63,7 @@ PROMPT;
         }
 
         Log::channel('import')->info('Tatoeba + Leipzig pass complete', [
-            'still_need_gemini' => count($stillNeeded),
+            'still_need_ai' => count($stillNeeded),
         ]);
 
         foreach (array_chunk($stillNeeded, self::GEMINI_BATCH_SIZE) as $chunk) {
@@ -74,7 +74,7 @@ PROMPT;
             'words_processed'       => $this->wordsProcessed,
             'examples_from_tatoeba' => $this->examplesFromTatoeba,
             'examples_from_leipzig' => $this->examplesFromLeipzig,
-            'examples_from_gemini'  => $this->examplesFromGemini,
+            'examples_from_ai'      => $this->examplesFromGemini,
         ]);
     }
 
@@ -218,7 +218,7 @@ PROMPT;
         $result = $this->vertex->askFlashJson(self::GEMINI_SYSTEM, $userPrompt);
 
         if ($result === null) {
-            Log::channel('import')->warning('ExampleFiller: Gemini batch failed, retrying individually', [
+            Log::channel('import')->warning('ExampleFiller: AI batch failed, retrying individually', [
                 'batch_size' => count($chunk),
             ]);
             foreach ($chunk as $item) {

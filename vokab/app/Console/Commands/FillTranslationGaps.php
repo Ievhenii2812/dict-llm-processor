@@ -9,12 +9,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:fill-translation-gaps')]
-#[Description('Fill partial translation/gloss gaps left by truncated Gemini responses')]
+#[Description('Fill partial translation/gloss gaps left by truncated AI responses')]
 class FillTranslationGaps extends Command
 {
     public function handle(): int
     {
-        $this->info('Filling translation gaps (ru/uk translations via AI Studio, glosses via NLLB)...');
+        $this->info('Filling translation gaps (ru/uk translations via ' . config('import.ai_provider') . ', glosses via NLLB)...');
 
         $service = app(WordTranslationGapFillerService::class);
 
@@ -22,7 +22,7 @@ class FillTranslationGaps extends Command
             $service->run();
         } catch (AIRateLimitException) {
             $this->newLine();
-            $this->warn('AI Studio daily/rate limit reached — stopping cleanly.');
+            $this->warn('AI provider rate limit reached — stopping cleanly.');
             $this->info('Progress so far is saved. Re-run this command later to continue.');
             $this->info('Details: storage/logs/import/');
 

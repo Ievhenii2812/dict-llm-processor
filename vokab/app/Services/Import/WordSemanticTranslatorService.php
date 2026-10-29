@@ -70,7 +70,7 @@ PROMPT;
 
         Log::channel('import')->info('=== WordSemanticTranslatorService finished ===', [
             'processed'              => $this->processed,
-            'translated_via_gemini'  => $this->translated,
+            'translated_via_ai'      => $this->translated,
             'translated_via_nllb'    => $this->translatedViaNllb,
             'merged_forms'           => $this->mergedForms,
             'deleted_compositional'  => $this->deletedCompositional,
@@ -102,7 +102,7 @@ PROMPT;
         if ($this->processed % 2000 === 0) {
             Log::channel('import')->info('WordSemanticTranslator progress', [
                 'processed'             => $this->processed,
-                'translated_via_gemini' => $this->translated,
+                'translated_via_ai'     => $this->translated,
                 'translated_via_nllb'   => $this->translatedViaNllb,
                 'merged_forms'          => $this->mergedForms,
                 'deleted_compositional' => $this->deletedCompositional,

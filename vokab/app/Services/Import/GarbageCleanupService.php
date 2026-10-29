@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
- * Identifies and removes garbage words using Gemini Flash via Vertex AI.
+ * Identifies and removes garbage words using AI provider.
  *
  * Batch size 200: simple classification task (no generation),
  * model checks each word independently — safe at high batch sizes.

@@ -8,12 +8,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:translate-homonyms')]
-#[Description('Translate homonym words via Gemini Flash using sentence context for disambiguation')]
+#[Description('Translate homonym words via the configured AI provider using sentence context for disambiguation')]
 class TranslateHomonyms extends Command
 {
     public function handle(): int
     {
-        $this->info('Translating homonyms via Gemini Flash (context-aware)...');
+        $this->info('Translating homonyms via ' . config('import.ai_provider') . ' (context-aware)...');
 
         $service = app(HomonymTranslatorService::class);
         $service->run();

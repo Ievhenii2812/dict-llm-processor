@@ -8,12 +8,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:assign-cefr')]
-#[Description('Assign CEFR levels (A1-C2) to words via Gemini Flash (Vertex AI)')]
+#[Description('Assign CEFR levels (A1-C2) to words via the configured AI provider')]
 class AssignCefrLevels extends Command
 {
     public function handle(): int
     {
-        $this->info('Assigning CEFR levels via Gemini Flash...');
+        $this->info('Assigning CEFR levels via ' . config('import.ai_provider') . '...');
 
         $service = app(CefrAssignmentService::class);
         $service->run();

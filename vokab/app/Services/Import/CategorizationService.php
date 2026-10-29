@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Import\Contracts\AIProviderInterface;
 
 /**
- * Categorizes German words into thematic groups using Gemini Pro via Vertex AI.
+ * Categorizes German words into thematic groups using AI provider.
  *
  * Uses Pro model for accurate semantic understanding of word context.
  * CEFR level assignment is handled separately by CefrAssignmentService (Flash).

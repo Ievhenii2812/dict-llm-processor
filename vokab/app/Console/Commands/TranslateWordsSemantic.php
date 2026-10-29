@@ -9,12 +9,12 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('import:translate-words')]
-#[Description('Translate non-homonym words with meanings, gloss via Gemini Flash (AI Studio)')]
+#[Description('Translate non-homonym words with meanings, gloss via the configured AI provider')]
 class TranslateWordsSemantic extends Command
 {
     public function handle(): int
     {
-        $this->info('Translating words (semantic, multi-meaning) via Gemini Flash (AI Studio)...');
+        $this->info('Translating words (semantic, multi-meaning) via ' . config('import.ai_provider') . '...');
 
         $service = app(WordSemanticTranslatorService::class);
 
@@ -22,7 +22,7 @@ class TranslateWordsSemantic extends Command
             $service->run();
         } catch (AIRateLimitException) {
             $this->newLine();
-            $this->warn('AI Studio daily/rate limit reached — stopping cleanly.');
+            $this->warn('AI provider rate limit reached — stopping cleanly.');
             $this->info('Progress so far is saved. Simply re-run this command later');
             $this->info('(tomorrow, or once the rate limit resets) to continue from where it left off.');
             $this->info('Details: storage/logs/import/');
