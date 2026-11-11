@@ -20,9 +20,10 @@ class TranslateWordsSemantic extends Command
 
         try {
             $service->run();
-        } catch (AIRateLimitException) {
+        } catch (AIRateLimitException $e) {
             $this->newLine();
-            $this->warn('AI provider rate limit reached — stopping cleanly.');
+            $this->warn('AI provider rate limit reached or all models unavailable — stopping cleanly.');
+            $this->line($e->getMessage());
             $this->info('Progress so far is saved. Simply re-run this command later');
             $this->info('(tomorrow, or once the rate limit resets) to continue from where it left off.');
             $this->info('Details: storage/logs/import/');

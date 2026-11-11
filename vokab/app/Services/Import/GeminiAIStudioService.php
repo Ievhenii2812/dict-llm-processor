@@ -2,15 +2,35 @@
 
 namespace App\Services\Import;
 
+use App\Services\Import\Concerns\ChainsModels;
 use App\Services\Import\Contracts\AIProviderInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Gemini API client (Google AI Studio).
+ *
+ * Quotas are per model, so each tier accepts a comma-separated model list that
+ * is tried in order (see ChainsModels):
+ *   GEMINI_FLASH_MODEL=gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash
+ *   GEMINI_PRO_MODEL=gemini-3.1-pro-preview
+ * A single name works exactly as before.
+ *
+ * HTTP 503 (model overloaded) is not retried on the same model and does not
+ * return null: the model is parked briefly and the next one is used, instead of
+ * the caller re-sending the same batch (and burning quota) on an overloaded model.
+ */
 class GeminiAIStudioService implements AIProviderInterface
 {
+    use ChainsModels;
+
     private string $apiKey;
-    private string $proModel;
-    private string $flashModel;
+
+    /** @var string[] */
+    private array $proModels;
+
+    /** @var string[] */
+    private array $flashModels;
 
     private const string BASE_URL    = 'https://generativelanguage.googleapis.com/v1beta/models';
     private const int    TIMEOUT     = 120;
@@ -21,21 +41,27 @@ class GeminiAIStudioService implements AIProviderInterface
     public function __construct()
     {
         $this->apiKey     = config('import.gemini_api_key');
-        $this->proModel   = config('import.gemini_pro_model', 'gemini-3.1-pro');
-        $this->flashModel = config('import.gemini_flash_model', 'gemini-3.6-flash');
+        $this->proModels   = self::parseModelList((string) config('import.gemini_pro_model'), 'gemini-3.1-pro-preview');
+        $this->flashModels = self::parseModelList((string) config('import.gemini_flash_model'), 'gemini-3.6-flash');
     }
 
     public function askProJson(string $systemPrompt, string $userPrompt): ?array
     {
-        return $this->askJson($this->proModel, $systemPrompt, $userPrompt);
+        return $this->askWithFallback(
+            $this->proModels,
+            fn (string $model) => $this->askJsonOnModel($model, $systemPrompt, $userPrompt)
+        );
     }
 
     public function askFlashJson(string $systemPrompt, string $userPrompt): ?array
     {
-        return $this->askJson($this->flashModel, $systemPrompt, $userPrompt);
+        return $this->askWithFallback(
+            $this->flashModels,
+            fn (string $model) => $this->askJsonOnModel($model, $systemPrompt, $userPrompt)
+        );
     }
 
-    private function askJson(string $model, string $systemPrompt, string $userPrompt): ?array
+    private function askJsonOnModel(string $model, string $systemPrompt, string $userPrompt): ?array
     {
         $attempt = 0;
 
@@ -112,8 +138,15 @@ class GeminiAIStudioService implements AIProviderInterface
         }
 
         if ($status === 429) {
-            Log::channel('import')->error('AIStudio: RATE LIMIT HIT (429)', ['model' => $model]);
-            throw new AIRateLimitException('AI Studio rate limit (429) reached');
+            throw $this->rateLimitFailure($model, $result ?: null);
+        }
+
+        if ($status === 503) {
+            throw new AIModelUnavailableException("{$model} is overloaded (HTTP 503)");
+        }
+
+        if ($status === 404 || $status === 403) {
+            throw new AIModelUnavailableException("{$model} not available for this key (HTTP {$status})", permanent: true);
         }
 
         if ($result === false || $status !== 200) {
@@ -127,6 +160,34 @@ class GeminiAIStudioService implements AIProviderInterface
         if (json_last_error() !== JSON_ERROR_NONE) return null;
 
         return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+    }
+
+    /**
+     * A per-minute limit with a short retry hint only parks the model for a
+     * moment; anything else (daily quota, unknown body) drops it for the run.
+     * The body is logged so the real error format can be checked in the logs.
+     */
+    private function rateLimitFailure(string $model, ?string $body): \RuntimeException
+    {
+        Log::channel('import')->warning('AIStudio: HTTP 429', [
+            'model' => $model,
+            'body'  => $body ? mb_substr($body, 0, 300) : null,
+        ]);
+
+        if (
+            $body !== null
+            && !preg_match('/PerDay/i', $body)
+            && preg_match('/PerMinute/i', $body)
+            && preg_match('/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/', $body, $m)
+            && (float) $m[1] <= 90
+        ) {
+            return new AIModelUnavailableException(
+                "{$model} per-minute limit (HTTP 429)",
+                retryAfterSeconds: (int) ceil((float) $m[1]) + 1
+            );
+        }
+
+        return new AIRateLimitException("{$model} rate limit (HTTP 429)");
     }
 
     private function parseJson(string $raw): ?array

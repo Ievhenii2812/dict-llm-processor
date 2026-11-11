@@ -20,9 +20,10 @@ class FillTranslationGaps extends Command
 
         try {
             $service->run();
-        } catch (AIRateLimitException) {
+        } catch (AIRateLimitException $e) {
             $this->newLine();
-            $this->warn('AI provider rate limit reached — stopping cleanly.');
+            $this->warn('AI provider rate limit reached or all models unavailable — stopping cleanly.');
+            $this->line($e->getMessage());
             $this->info('Progress so far is saved. Re-run this command later to continue.');
             $this->info('Details: storage/logs/import/');
 
