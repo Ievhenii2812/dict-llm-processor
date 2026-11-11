@@ -51,7 +51,7 @@ Example:
 PROMPT;
 
     public function __construct(
-        private readonly AIProviderInterface $vertex,
+        private readonly AIProviderInterface $ai,
     ) {}
 
     public function run(): void
@@ -79,7 +79,7 @@ PROMPT;
         $userPrompt = "Assign CEFR levels to these " . count($wordList) . " German words:\n"
             . implode("\n", $wordList);
 
-        $result = $this->vertex->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null) {
             Log::channel('import')->warning('CefrAssignment: no result, retrying individually', [
@@ -139,7 +139,7 @@ PROMPT;
     private function processSingle(Word $word): void
     {
         $userPrompt = "Assign CEFR level to this German word:\n{$word->word}";
-        $result     = $this->vertex->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result     = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null) return;
 

@@ -56,19 +56,19 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CleanupService::class, function ($app) {
             return new CleanupService(
                 spacy: $app->make(SpacyService::class),
-                vertex: $app->make(AIProviderInterface::class),
+                ai: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(GarbageCleanupService::class, function ($app) {
             return new GarbageCleanupService(
-                vertex: $app->make(AIProviderInterface::class),
+                ai: $app->make(AIProviderInterface::class),
             );
         });
 
         $this->app->singleton(CategorizationService::class, function ($app) {
             return new CategorizationService(
-                vertex: $app->make(AIProviderInterface::class),
+                ai: $app->make(AIProviderInterface::class),
             );
         });
 
@@ -89,7 +89,7 @@ class AppServiceProvider extends ServiceProvider
                 leipzig: $app->make(LeipzigSentencesParser::class),
                 translator: $app->make(ExampleTranslator::class),
                 saver: $app->make(WordSaver::class),
-                vertex: $app->make(AIProviderInterface::class),
+                ai: $app->make(AIProviderInterface::class),
             );
         });
 

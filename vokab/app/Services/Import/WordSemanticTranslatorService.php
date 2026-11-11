@@ -81,22 +81,22 @@ PROMPT;
     private function processBatch(array $words): void
     {
         // Step 1: local morphology pass (free, no API calls at all)
-        $needsGeminiTranslation = [];
+        $needsAiTranslation = [];
 
         foreach ($words as $word) {
             $handled = $this->handleLocally($word);
 
             if (!$handled) {
-                $needsGeminiTranslation[] = $word;
+                $needsAiTranslation[] = $word;
             }
 
             $this->processed++;
         }
 
-        // Step 2: only words that survived local checks go to Gemini,
+        // Step 2: only words that survived local checks go to the AI provider,
         // and only for translation — no segmentation needed anymore
-        if (!empty($needsGeminiTranslation)) {
-            $this->translateBatchViaGemini($needsGeminiTranslation);
+        if (!empty($needsAiTranslation)) {
+            $this->translateBatchViaAi($needsAiTranslation);
         }
 
         if ($this->processed % 2000 === 0) {
@@ -115,7 +115,7 @@ PROMPT;
      * (spaCy lemma check, CharSplit compound segmentation, NLLB translation).
      *
      * @return bool true if the word was fully handled (merged/deleted/translated),
-     *              false if it still needs Gemini for semantic translation
+     *              false if it still needs the AI provider for semantic translation
      */
     private function handleLocally(Word $word): bool
     {
@@ -164,7 +164,7 @@ PROMPT;
 
     /**
      * Same deterministic rules as before, now fed by CharSplit segments
-     * instead of Gemini-reported segments. Both components must exist
+     * instead of AI-reported segments. Both components must exist
      * as separate lemmas in our own DB before we ever delete anything.
      *
      * @return bool true if handled (deleted or translated via NLLB)
@@ -188,7 +188,7 @@ PROMPT;
         $allPartsExist = $partWords->every(fn($w) => $w !== null);
 
         if (!$allPartsExist) {
-            return false; // still can't verify — fall back to Gemini translation
+            return false; // still can't verify — fall back to AI translation
         }
 
         $allNouns = $partWords->every(
@@ -266,7 +266,7 @@ PROMPT;
         }
     }
 
-    private function translateBatchViaGemini(array $words, int $depth = 0): void
+    private function translateBatchViaAi(array $words, int $depth = 0): void
     {
         if (empty($words)) return;
 
@@ -308,7 +308,7 @@ PROMPT;
         // just try it once as its own request, no further splitting logic needed.
         if (count($words) <= self::MIN_SPLIT_SIZE) {
             if ($depth === 0) {
-                $this->translateBatchViaGemini($words, depth: 1);
+                $this->translateBatchViaAi($words, depth: 1);
                 return;
             }
 
@@ -325,7 +325,7 @@ PROMPT;
                 'batch_size' => count($words),
                 'reason'     => $reason,
             ]);
-            $this->translateBatchViaGemini($words, depth: 1);
+            $this->translateBatchViaAi($words, depth: 1);
             return;
         }
 
@@ -338,7 +338,7 @@ PROMPT;
             'reason'        => $reason,
         ]);
 
-        $this->translateBatchViaGemini($firstHalf, depth: 0);
-        $this->translateBatchViaGemini($secondHalf, depth: 0);
+        $this->translateBatchViaAi($firstHalf, depth: 0);
+        $this->translateBatchViaAi($secondHalf, depth: 0);
     }
 }

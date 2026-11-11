@@ -48,7 +48,7 @@ Respond ONLY with this exact JSON format, no other fields:
 PROMPT;
 
     public function __construct(
-        private readonly AIProviderInterface $vertex,
+        private readonly AIProviderInterface $ai,
     ) {}
 
     public function run(): void
@@ -74,7 +74,7 @@ PROMPT;
         $wordList   = array_map(fn($w) => $w->word, $words);
         $userPrompt = "Check these " . count($wordList) . " words:\n" . implode("\n", $wordList);
 
-        $result = $this->vertex->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null || empty($result['results'])) {
             Log::channel('import')->warning('GarbageCleanup: no result, retrying individually', [
@@ -145,7 +145,7 @@ PROMPT;
     private function processSingle(Word $word): void
     {
         $userPrompt = "Check this word:\n{$word->word}";
-        $result     = $this->vertex->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result     = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null || empty($result['results'])) {
             return;

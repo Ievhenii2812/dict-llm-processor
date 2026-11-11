@@ -34,7 +34,7 @@ class CleanupService
 
     public function __construct(
         private readonly SpacyService        $spacy,
-        private readonly AIProviderInterface $vertex,
+        private readonly AIProviderInterface $ai,
     ) {}
 
     public function run(): void
@@ -244,7 +244,7 @@ Respond with:
 }
 PROMPT;
 
-            $result   = $this->vertex->askProJson($system, $prompt);
+            $result   = $this->ai->askProJson($system, $prompt);
             $decision = $result['decision'] ?? 'keep';
 
             if ($decision === 'merge') {

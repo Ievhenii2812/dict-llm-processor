@@ -4,7 +4,7 @@ namespace App\Services\Import\Contracts;
 
 /**
  * Common interface for all AI providers used across the import pipeline
- * (Gemini AI Studio, Mistral, Groq). Lets every consuming service depend
+ * (Gemini AI Studio, Vertex AI, Mistral, Groq). Lets every consuming service depend
  * on this interface instead of a concrete provider class, so switching
  * providers is a one-line config change (AI_PROVIDER in .env) rather
  * than a code change in every service.
