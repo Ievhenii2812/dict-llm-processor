@@ -61,7 +61,7 @@ RESPONSE FORMAT:
 PROMPT;
 
     public function __construct(
-        private readonly AIProviderInterface $vertex,
+        private readonly AIProviderInterface $ai,
     ) {}
 
     public function run(): void
@@ -97,7 +97,7 @@ PROMPT;
         $userPrompt = "Categorize these " . count($wordList) . " German words:\n"
             . implode("\n", $wordList);
 
-        $result = $this->vertex->askProJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result = $this->ai->askProJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null || empty($result['results'])) {
             Log::channel('import')->warning('CategorizationService: no result, retrying individually', [
@@ -168,7 +168,7 @@ PROMPT;
             ? $word->part_of_speech->name
             : 'Unknown';
         $userPrompt = "Categorize this German word:\n{$word->word} ({$posName})";
-        $result     = $this->vertex->askProJson(self::SYSTEM_PROMPT, $userPrompt);
+        $result     = $this->ai->askProJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null || empty($result['results'])) {
             return;

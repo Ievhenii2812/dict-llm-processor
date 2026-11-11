@@ -11,13 +11,13 @@ class ExampleFillerService
     private int $wordsProcessed        = 0;
     private int $examplesFromTatoeba   = 0;
     private int $examplesFromLeipzig   = 0;
-    private int $examplesFromGemini    = 0;
+    private int $examplesFromAi    = 0;
 
     private const int MIN_EXAMPLES      = 5;
     private const int PROCESS_BATCH_SIZE = 15; // words per outer batch (Tatoeba + Leipzig collection)
-    private const int GEMINI_BATCH_SIZE  = 25;
+    private const int BATCH_SIZE  = 25;
 
-    private const string GEMINI_SYSTEM = <<<'PROMPT'
+    private const string SYSTEM_PROMPT = <<<'PROMPT'
 You are a German language teacher creating example sentences for B1/B2 vocabulary study.
 
 For each word, generate the requested number of natural, clear German sentences
@@ -38,7 +38,7 @@ PROMPT;
         private readonly LeipzigSentencesParser $leipzig,
         private readonly ExampleTranslator      $translator,
         private readonly WordSaver              $saver,
-        private readonly AIProviderInterface    $vertex,
+        private readonly AIProviderInterface    $ai,
     ) {}
 
     public function run(): void
@@ -66,15 +66,15 @@ PROMPT;
             'still_need_ai' => count($stillNeeded),
         ]);
 
-        foreach (array_chunk($stillNeeded, self::GEMINI_BATCH_SIZE) as $chunk) {
-            $this->fillBatchWithGemini($chunk);
+        foreach (array_chunk($stillNeeded, self::BATCH_SIZE) as $chunk) {
+            $this->fillBatchViaAi($chunk);
         }
 
         Log::channel('import')->info('=== ExampleFillerService finished ===', [
             'words_processed'       => $this->wordsProcessed,
             'examples_from_tatoeba' => $this->examplesFromTatoeba,
             'examples_from_leipzig' => $this->examplesFromLeipzig,
-            'examples_from_ai'      => $this->examplesFromGemini,
+            'examples_from_ai'      => $this->examplesFromAi,
         ]);
     }
 
@@ -205,7 +205,7 @@ PROMPT;
     /**
      * @param array<array{external_id: int, word: string, needed: int}> $chunk
      */
-    private function fillBatchWithGemini(array $chunk): void
+    private function fillBatchViaAi(array $chunk): void
     {
         $requestLines = array_map(
             fn($item) => "{$item['word']}: {$item['needed']} sentences",
@@ -215,14 +215,14 @@ PROMPT;
         $userPrompt = "Generate B1/B2 example sentences for these German words:\n"
             . implode("\n", $requestLines);
 
-        $result = $this->vertex->askFlashJson(self::GEMINI_SYSTEM, $userPrompt);
+        $result = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $userPrompt);
 
         if ($result === null) {
             Log::channel('import')->warning('ExampleFiller: AI batch failed, retrying individually', [
                 'batch_size' => count($chunk),
             ]);
             foreach ($chunk as $item) {
-                $this->fillSingleWithGemini($item['external_id'], $item['word'], $item['needed']);
+                $this->fillSingleViaAi($item['external_id'], $item['word'], $item['needed']);
             }
             return;
         }
@@ -231,7 +231,7 @@ PROMPT;
             $sentences = $result[$item['word']] ?? null;
 
             if (empty($sentences) || !is_array($sentences)) {
-                $this->fillSingleWithGemini($item['external_id'], $item['word'], $item['needed']);
+                $this->fillSingleViaAi($item['external_id'], $item['word'], $item['needed']);
                 continue;
             }
 
@@ -244,17 +244,17 @@ PROMPT;
                     sentence:       $sentence,
                     isAiGenerated:  true,
                 );
-                $this->examplesFromGemini++;
+                $this->examplesFromAi++;
             }
         }
     }
 
-    private function fillSingleWithGemini(int $externalId, string $word, int $needed): void
+    private function fillSingleViaAi(int $externalId, string $word, int $needed): void
     {
         $prompt = "Generate {$needed} B1/B2 German example sentences using the word \"{$word}\".\n"
             . "Respond with: {\"{$word}\": [\"sentence1\", \"sentence2\"]}";
 
-        $result = $this->vertex->askFlashJson(self::GEMINI_SYSTEM, $prompt);
+        $result = $this->ai->askFlashJson(self::SYSTEM_PROMPT, $prompt);
         if ($result === null) return;
 
         $sentences = $result[$word] ?? null;
@@ -269,7 +269,7 @@ PROMPT;
                 sentence:       $sentence,
                 isAiGenerated:  true,
             );
-            $this->examplesFromGemini++;
+            $this->examplesFromAi++;
         }
     }
 }
