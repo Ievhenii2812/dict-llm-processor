@@ -2,6 +2,7 @@
 
 namespace App\Services\Import;
 
+use App\Services\Import\Concerns\ChainsModels;
 use App\Services\Import\Contracts\AIProviderInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +18,13 @@ use Illuminate\Support\Facades\Log;
  * "Flash" tier -> openai/gpt-oss-20b, "Pro" tier -> openai/gpt-oss-120b.
  * Both are reasoning models: reasoning_effort and max_completion_tokens are set
  * explicitly, otherwise reasoning can use up the whole budget and leave the
- * content empty (json_validate_failed).
+ * content empty (json_validate_failed). reasoning_effort is only sent to gpt-oss
+ * models; other model families on Groq take different values for it.
+ *
+ * Limits are per model, so each tier accepts a comma-separated model list that
+ * is tried in order (see ChainsModels), e.g.
+ *   GROQ_FLASH_MODEL=openai/gpt-oss-20b,openai/gpt-oss-120b
+ * When the first model's daily limit is reached the next one takes over.
  *
  * Config (.env):
  *   GROQ_API_KEY=your-key
@@ -28,9 +35,15 @@ use Illuminate\Support\Facades\Log;
  */
 class GroqService implements AIProviderInterface
 {
+    use ChainsModels;
+
     private string $apiKey;
-    private string $flashModel;
-    private string $proModel;
+
+    /** @var string[] */
+    private array $flashModels;
+
+    /** @var string[] */
+    private array $proModels;
     private string $reasoningEffort;
     private int    $maxTokens;
 
@@ -49,23 +62,29 @@ class GroqService implements AIProviderInterface
     public function __construct()
     {
         $this->apiKey          = config('import.groq_api_key');
-        $this->flashModel      = config('import.groq_flash_model', 'openai/gpt-oss-20b');
-        $this->proModel        = config('import.groq_pro_model', 'openai/gpt-oss-120b');
+        $this->flashModels     = self::parseModelList((string) config('import.groq_flash_model'), 'openai/gpt-oss-20b');
+        $this->proModels       = self::parseModelList((string) config('import.groq_pro_model'), 'openai/gpt-oss-120b');
         $this->reasoningEffort = (string) config('import.groq_reasoning_effort', 'low');
         $this->maxTokens       = (int) config('import.groq_max_tokens', 8192);
     }
 
     public function askFlashJson(string $systemPrompt, string $userPrompt): ?array
     {
-        return $this->askJson($this->flashModel, $systemPrompt, $userPrompt);
+        return $this->askWithFallback(
+            $this->flashModels,
+            fn (string $model) => $this->askJsonOnModel($model, $systemPrompt, $userPrompt)
+        );
     }
 
     public function askProJson(string $systemPrompt, string $userPrompt): ?array
     {
-        return $this->askJson($this->proModel, $systemPrompt, $userPrompt);
+        return $this->askWithFallback(
+            $this->proModels,
+            fn (string $model) => $this->askJsonOnModel($model, $systemPrompt, $userPrompt)
+        );
     }
 
-    private function askJson(string $model, string $systemPrompt, string $userPrompt): ?array
+    private function askJsonOnModel(string $model, string $systemPrompt, string $userPrompt): ?array
     {
         $attempt = 0;
 
@@ -119,7 +138,7 @@ class GroqService implements AIProviderInterface
             'max_completion_tokens' => $this->maxTokens,
         ];
 
-        if ($this->reasoningEffort !== '') {
+        if ($this->reasoningEffort !== '' && str_contains($model, 'gpt-oss')) {
             $body['reasoning_effort'] = $this->reasoningEffort;
         }
 
@@ -150,7 +169,7 @@ class GroqService implements AIProviderInterface
         if ($status === 429) {
             $wait = $this->rateLimitWaitSeconds($http_response_header ?? [], $result ?: null);
 
-            Log::channel('import')->error('Groq: RATE LIMIT HIT (429)', [
+            Log::channel('import')->warning('Groq: HTTP 429', [
                 'model'  => $model,
                 'wait_s' => $wait,
                 'body'   => $result ? mb_substr($result, 0, 300) : null,
@@ -164,7 +183,19 @@ class GroqService implements AIProviderInterface
                 return $this->sendRequest($model, $systemPrompt, $userPrompt, $rateLimitAttempt + 1);
             }
 
-            throw new AIRateLimitException('Groq rate limit (429) reached');
+            throw new AIRateLimitException("{$model} rate limit (HTTP 429)");
+        }
+
+        if ($status === 503) {
+            throw new AIModelUnavailableException("{$model} is over capacity (HTTP 503)");
+        }
+
+        if (
+            $status === 404
+            || $status === 403
+            || ($status === 400 && $result && preg_match('/decommissioned|model_not_found/i', $result))
+        ) {
+            throw new AIModelUnavailableException("{$model} not available for this key (HTTP {$status})", permanent: true);
         }
 
         if ($result === false || $status !== 200) {
