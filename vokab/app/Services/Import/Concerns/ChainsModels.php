@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\Log;
  *
  *  - AIRateLimitException (quota used up)   -> model is dropped for the rest of
  *    the process, the next model takes over;
- *  - AIModelUnavailableException, transient  -> model is parked for a short
- *    cooldown (overload, per-minute limit);
+ *  - AIModelUnavailableException, transient  -> model is parked for a cooldown
+ *    (overload, timeout, per-minute limit) that doubles on every consecutive
+ *    failure of that model (up to CHAIN_MAX_COOLDOWN_S) and resets on success;
  *  - AIModelUnavailableException, permanent  -> model is dropped for the rest of
  *    the process (404/403, decommissioned);
  *  - AIEmptyResponseException (HTTP 200 without text) -> the next model gets the
@@ -43,11 +44,15 @@ trait ChainsModels
     /** @var array<string, int> model => unix time until which it is parked */
     private array $parkedUntil = [];
 
+    /** @var array<string, int> model => consecutive transient failures */
+    private array $failStreak = [];
+
     private ?string $activeModel = null;
 
     private const int CHAIN_ROUNDS       = 4;
     private const int CHAIN_MAX_SLEEP_S  = 30;
     private const int CHAIN_MAX_EMPTY    = 2;
+    private const int CHAIN_MAX_COOLDOWN_S = 600;
 
     /**
      * "a, b ,c" => ['a', 'b', 'c']; an empty value falls back to $default.
@@ -116,15 +121,22 @@ trait ChainsModels
                         continue;
                     }
 
-                    $this->parkedUntil[$model] = $this->aiNow() + $e->retryAfterSeconds;
+                    $streak   = ($this->failStreak[$model] ?? 0) + 1;
+                    $cooldown = min($e->retryAfterSeconds * (2 ** ($streak - 1)), self::CHAIN_MAX_COOLDOWN_S);
+
+                    $this->failStreak[$model]  = $streak;
+                    $this->parkedUntil[$model] = $this->aiNow() + $cooldown;
                     $waitable = true;
                     $this->aiLog('warning', 'AI: model unavailable, parking it', [
-                        'model' => $model, 'cooldown_s' => $e->retryAfterSeconds, 'detail' => $e->getMessage(),
+                        'model' => $model, 'cooldown_s' => $cooldown, 'streak' => $streak, 'detail' => $e->getMessage(),
                     ]);
                     continue;
                 }
 
-                $this->noteActiveModel($model);
+                if ($result !== null) {
+                    $this->failStreak[$model] = 0;
+                    $this->noteActiveModel($model);
+                }
 
                 return $result;
             }
