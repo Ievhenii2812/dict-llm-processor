@@ -141,12 +141,25 @@ class GeminiAIStudioService implements AIProviderInterface
             ],
         ]);
 
-        $result = @file_get_contents($url, false, $context);
+        $startedAt = microtime(true);
+        $result    = @file_get_contents($url, false, $context);
+        $elapsed   = round(microtime(true) - $startedAt, 1);
         Cache::put('gemini_last_request_at', microtime(true), 600);
 
         $status = 0;
         foreach ($http_response_header ?? [] as $h) {
             if (preg_match('#^HTTP/\S+\s+(\d+)#', $h, $m)) { $status = (int) $m[1]; break; }
+        }
+
+        if ($status === 0) {
+            // No HTTP response at all: timeout or connection error. Re-sending the same
+            // batch to a model that just hung for TIMEOUT seconds only wastes minutes,
+            // so park it (the chain lengthens the cooldown on repeated failures).
+            $reason = error_get_last()['message'] ?? 'no HTTP response';
+            Log::channel('import')->warning('AIStudio: no HTTP response', [
+                'model' => $model, 'elapsed_s' => $elapsed, 'error' => mb_substr($reason, 0, 200),
+            ]);
+            throw new AIModelUnavailableException("{$model} did not answer after {$elapsed}s", retryAfterSeconds: 300);
         }
 
         if ($status === 429) {

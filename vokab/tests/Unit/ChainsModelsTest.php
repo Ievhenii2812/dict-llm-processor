@@ -163,7 +163,8 @@ class ChainsModelsTest extends TestCase
             $this->assertStringContainsString('overloaded', $e->getMessage());
         }
 
-        $this->assertSame(8, $attempts);            // 2 models x 4 rounds
+        // round 1 and 2 ask both models; the second failure doubles the cooldown to 60s, so round 3 finds both parked
+        $this->assertSame(6, $attempts);
         $this->assertSame([30, 30, 30], $chain->slept);
     }
 
@@ -243,5 +244,56 @@ class ChainsModelsTest extends TestCase
 
         $this->assertNull($result);
         $this->assertSame([], $chain->slept);
+    }
+
+    public function test_cooldown_doubles_on_consecutive_failures_and_resets_after_success(): void
+    {
+        $chain = $this->chain();
+        $m1Down = true;
+        $calls = [];
+
+        $attempt = function (string $m) use (&$calls, &$m1Down) {
+            $calls[] = $m;
+            if ($m === 'm1' && $m1Down) {
+                throw new AIModelUnavailableException('timeout', retryAfterSeconds: 30);
+            }
+            return ['ok' => $m];
+        };
+
+        $chain->run(['m1', 'm2'], $attempt);          // m1 fails, parked 30s
+        $chain->now += 31;
+        $chain->run(['m1', 'm2'], $attempt);          // m1 fails again, parked 60s
+        $chain->now += 31;
+        $chain->run(['m1', 'm2'], $attempt);          // still parked (31 < 60): m1 not asked
+
+        $this->assertSame(['m1', 'm2', 'm1', 'm2', 'm2'], $calls);
+
+        $m1Down = false;
+        $chain->now += 30;                             // 61s since the second failure
+        $this->assertSame(['ok' => 'm1'], $chain->run(['m1', 'm2'], $attempt));
+
+        $m1Down = true;
+        $chain->run(['m1', 'm2'], $attempt);          // fails once more after a success
+        $chain->now += 31;
+        $this->assertSame(['ok' => 'm1'], $chain->run(['m1', 'm2'], fn (string $m) => ['ok' => $m])); // streak was reset: cooldown is 30s again
+    }
+
+    public function test_cooldown_is_capped(): void
+    {
+        $chain = $this->chain();
+        $calls = 0;
+
+        for ($i = 0; $i < 12; $i++) {
+            try {
+                $chain->run(['m1'], function () use (&$calls) {
+                    $calls++;
+                    throw new AIModelUnavailableException('timeout', retryAfterSeconds: 300);
+                });
+            } catch (AIRateLimitException) {
+            }
+            $chain->now += 601; // always past the cap, so every call really asks again
+        }
+
+        $this->assertSame(12, $calls); // one ask per run (the pause outlasts the rounds), and 601s is always past the 600s cap
     }
 }
