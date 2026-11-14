@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\Import\AIEmptyResponseException;
 use App\Services\Import\AIModelUnavailableException;
 use App\Services\Import\AIRateLimitException;
 use App\Services\Import\Concerns\ChainsModels;
@@ -195,5 +196,52 @@ class ChainsModelsTest extends TestCase
 
         $this->assertNull($result);
         $this->assertSame(['m1'], $calls);
+    }
+
+    public function test_empty_response_goes_to_the_next_model_without_parking_the_first(): void
+    {
+        $chain = $this->chain();
+        $calls = [];
+        $m1Empty = true;
+
+        $attempt = function (string $m) use (&$calls, &$m1Empty) {
+            $calls[] = $m;
+            if ($m === 'm1' && $m1Empty) {
+                throw new AIEmptyResponseException('empty');
+            }
+            return ['ok' => $m];
+        };
+
+        $this->assertSame(['ok' => 'm2'], $chain->run(['m1', 'm2'], $attempt));
+
+        $m1Empty = false;
+        $this->assertSame(['ok' => 'm1'], $chain->run(['m1', 'm2'], $attempt)); // m1 is still first in line
+
+        $this->assertSame(['m1', 'm2', 'm1'], $calls);
+        $this->assertSame([], $chain->slept);
+    }
+
+    public function test_second_empty_response_returns_null_instead_of_trying_every_model(): void
+    {
+        $chain = $this->chain();
+        $calls = [];
+
+        $result = $chain->run(['m1', 'm2', 'm3'], function (string $m) use (&$calls) {
+            $calls[] = $m;
+            throw new AIEmptyResponseException('empty');
+        });
+
+        $this->assertNull($result);
+        $this->assertSame(['m1', 'm2'], $calls);
+    }
+
+    public function test_empty_response_on_a_single_model_chain_returns_null(): void
+    {
+        $chain = $this->chain();
+
+        $result = $chain->run(['m1'], fn () => throw new AIEmptyResponseException('empty'));
+
+        $this->assertNull($result);
+        $this->assertSame([], $chain->slept);
     }
 }

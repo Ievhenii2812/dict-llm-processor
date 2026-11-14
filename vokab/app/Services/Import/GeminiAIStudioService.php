@@ -72,6 +72,12 @@ class GeminiAIStudioService implements AIProviderInterface
 
             $raw = $this->sendRequest($model, $systemPrompt, $userPrompt);
 
+            if ($raw === '') {
+                // The model answered but gave nothing usable (blocked / token limit);
+                // the same prompt would fail the same way, so leave it to the caller's split logic.
+                return null;
+            }
+
             if ($raw === null) {
                 Log::channel('import')->warning('AIStudio: no response', [
                     'model' => $model, 'attempt' => $attempt,
@@ -106,14 +112,20 @@ class GeminiAIStudioService implements AIProviderInterface
     {
         $url = self::BASE_URL . "/{$model}:generateContent?key={$this->apiKey}";
 
+        $generationConfig = [
+            'responseMimeType' => 'application/json',
+            'temperature'      => 0.1,
+            'maxOutputTokens'  => 16384,
+        ];
+
+        if (($thinking = $this->thinkingConfigFor($model)) !== null) {
+            $generationConfig['thinkingConfig'] = $thinking;
+        }
+
         $payload = json_encode([
             'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
-            'contents' => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'temperature'      => 0.1,
-                'maxOutputTokens'  => 16384,
-            ],
+            'contents'           => [['role' => 'user', 'parts' => [['text' => $userPrompt]]]],
+            'generationConfig'   => $generationConfig,
         ]);
 
         $context = stream_context_create([
@@ -149,6 +161,10 @@ class GeminiAIStudioService implements AIProviderInterface
             throw new AIModelUnavailableException("{$model} not available for this key (HTTP {$status})", permanent: true);
         }
 
+        if ($status === 400 && $result && preg_match('/thinking/i', $result)) {
+            throw new AIModelUnavailableException("{$model} rejected thinkingConfig (HTTP 400)", permanent: true);
+        }
+
         if ($result === false || $status !== 200) {
             Log::channel('import')->error('AIStudio: HTTP request failed', [
                 'status' => $status, 'body' => $result ? mb_substr($result, 0, 300) : null,
@@ -157,9 +173,82 @@ class GeminiAIStudioService implements AIProviderInterface
         }
 
         $data = json_decode($result, true);
-        if (json_last_error() !== JSON_ERROR_NONE) return null;
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::channel('import')->warning('AIStudio: response body is not valid JSON', [
+                'model' => $model, 'body' => mb_substr($result, 0, 200),
+            ]);
+            return null;
+        }
 
-        return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        return $this->extractText($model, $data);
+    }
+
+    /**
+     * Thinking is on by default for Gemini 3.x and its tokens count against
+     * maxOutputTokens. GEMINI_THINKING_LEVEL (minimal|low|medium|high) lowers it;
+     * empty (default) sends nothing. Gemini 2.5 uses a different parameter
+     * (thinkingBudget), so only gemini-3* models get the level.
+     */
+    private function thinkingConfigFor(string $model): ?array
+    {
+        $level = strtolower(trim((string) config('import.gemini_thinking_level')));
+
+        if (!in_array($level, ['minimal', 'low', 'medium', 'high'], true) || !str_starts_with($model, 'gemini-3')) {
+            return null;
+        }
+
+        return ['thinkingLevel' => $level];
+    }
+
+    /**
+     * Visible text of the first candidate.
+     *
+     * '' means the model answered but nothing usable came back for a reason that
+     * would repeat (safety block, MAX_TOKENS); an empty answer with any other
+     * finishReason is treated as a provider glitch and thrown so the chain can
+     * give the request to the next model.
+     *
+     * @throws AIEmptyResponseException
+     */
+    private function extractText(string $model, array $data): string
+    {
+        $text = '';
+        foreach ($data['candidates'][0]['content']['parts'] ?? [] as $part) {
+            if (!empty($part['thought'])) {
+                continue;
+            }
+            $text .= $part['text'] ?? '';
+        }
+
+        $finish = $data['candidates'][0]['finishReason'] ?? null;
+        $usage  = $data['usageMetadata'] ?? [];
+        $diag   = [
+            'model'          => $model,
+            'finish_reason'  => $finish,
+            'block_reason'   => $data['promptFeedback']['blockReason'] ?? null,
+            'prompt_tokens'  => $usage['promptTokenCount'] ?? null,
+            'output_tokens'  => $usage['candidatesTokenCount'] ?? null,
+            'thought_tokens' => $usage['thoughtsTokenCount'] ?? null,
+        ];
+
+        if (trim($text) !== '') {
+            if ($finish === 'MAX_TOKENS') {
+                Log::channel('import')->warning('AIStudio: output truncated (MAX_TOKENS)', $diag);
+            }
+            return $text;
+        }
+
+        Log::channel('import')->warning('AIStudio: empty response', $diag);
+
+        $deterministic = $diag['block_reason'] !== null || in_array($finish, [
+            'MAX_TOKENS', 'SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION', 'IMAGE_SAFETY', 'LANGUAGE',
+        ], true);
+
+        if ($deterministic) {
+            return '';
+        }
+
+        throw new AIEmptyResponseException("{$model} returned an empty response (finishReason=" . ($finish ?? 'none') . ')');
     }
 
     /**
