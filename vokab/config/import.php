@@ -9,6 +9,7 @@ return [
     'google_cloud_location'       => env('GOOGLE_CLOUD_LOCATION', 'us-east5'),
     'gemini_pro_model'            => env('GEMINI_PRO_MODEL', 'gemini-3.1-pro-preview'), // one model or a comma-separated fallback list
     'gemini_flash_model'          => env('GEMINI_FLASH_MODEL', 'gemini-3.6-flash'), // one model or a comma-separated fallback list
+    'gemini_thinking_level'       => env('GEMINI_THINKING_LEVEL', ''), // minimal|low|medium|high for gemini-3*; empty = API default
     'gemini_api_key'              => env('GEMINI_API_KEY'),
     'spacy_url'                   => env('SPACY_URL', 'http://vokab_lemmatizer:8000'),
     'wiktionary_dump'             => env('WIKTIONARY_DUMP', storage_path('app/private/dewiktionary-latest-pages-articles.xml.bz2')),

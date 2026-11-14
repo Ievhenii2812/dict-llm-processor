@@ -2,6 +2,7 @@
 
 namespace App\Services\Import\Concerns;
 
+use App\Services\Import\AIEmptyResponseException;
 use App\Services\Import\AIModelUnavailableException;
 use App\Services\Import\AIRateLimitException;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,10 @@ use Illuminate\Support\Facades\Log;
  *    cooldown (overload, per-minute limit);
  *  - AIModelUnavailableException, permanent  -> model is dropped for the rest of
  *    the process (404/403, decommissioned);
+ *  - AIEmptyResponseException (HTTP 200 without text) -> the next model gets the
+ *    same request, nothing is parked; after CHAIN_MAX_EMPTY empty answers the
+ *    request returns null, so a batch that no model can answer reaches the
+ *    callers' split logic instead of stalling the whole run;
  *  - null result (bad JSON, other HTTP error) is returned as is, so the callers'
  *    own retry/split logic keeps working.
  *
@@ -42,6 +47,7 @@ trait ChainsModels
 
     private const int CHAIN_ROUNDS       = 4;
     private const int CHAIN_MAX_SLEEP_S  = 30;
+    private const int CHAIN_MAX_EMPTY    = 2;
 
     /**
      * "a, b ,c" => ['a', 'b', 'c']; an empty value falls back to $default.
@@ -68,6 +74,8 @@ trait ChainsModels
      */
     protected function askWithFallback(array $models, callable $attempt): ?array
     {
+        $empties = 0;
+
         for ($round = 1; $round <= self::CHAIN_ROUNDS; $round++) {
             $waitable = false;
 
@@ -88,6 +96,16 @@ trait ChainsModels
                     $this->aiLog('warning', 'AI: quota exhausted, falling back to next model', [
                         'model' => $model, 'detail' => $e->getMessage(),
                     ]);
+                    continue;
+                } catch (AIEmptyResponseException $e) {
+                    $empties++;
+                    $this->aiLog('warning', 'AI: empty response', [
+                        'model' => $model, 'detail' => $e->getMessage(),
+                    ]);
+
+                    if ($empties >= self::CHAIN_MAX_EMPTY) {
+                        return null;
+                    }
                     continue;
                 } catch (AIModelUnavailableException $e) {
                     if ($e->permanent) {
@@ -112,12 +130,19 @@ trait ChainsModels
             }
 
             if (!$waitable) {
+                if ($empties > 0) {
+                    return null;
+                }
                 break;
             }
 
             if ($round < self::CHAIN_ROUNDS) {
                 $this->aiSleep($this->secondsUntilNextModel($models));
             }
+        }
+
+        if ($empties > 0) {
+            return null;
         }
 
         $message = 'No AI model available right now — ' . $this->describeChain($models);
